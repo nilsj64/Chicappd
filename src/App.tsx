@@ -23,10 +23,46 @@ type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; he
 const CARD_FLIGHT_MS = 360;
 const BOT_PAUSE_MS = 290;
 const TRICK_REVIEW_MS = 1300;
+const DISCARD_FLIGHT_MS = 430;
 
 function cardOrigin(selector: string): CardFlight["from"] | null {
   const rect = document.querySelector(selector)?.getBoundingClientRect();
   return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
+}
+
+async function flyDiscard(card: Card, playerId: string, index: number, faceUp: boolean) {
+  const selector = faceUp
+    ? `.your-hand [data-card-id="${card.id}"]`
+    : `[data-player-id="${playerId}"] .opponent-cards [data-card-id="${card.id}"]`;
+  const source = document.querySelector<HTMLElement>(selector);
+  const pile = document.querySelector<HTMLElement>(".discard-pile-cards");
+  if (!source || !pile) return;
+  const from = source.getBoundingClientRect();
+  const to = pile.getBoundingClientRect();
+  const offset = pileOffset(index);
+  const flying = source.cloneNode(true) as HTMLElement;
+  flying.classList.remove("selected");
+  flying.classList.add("discard-flight");
+  Object.assign(flying.style, {
+    position: "fixed", left: `${from.left}px`, top: `${from.top}px`,
+    width: `${from.width}px`, height: `${from.height}px`,
+    margin: "0", transform: "none", transition: "none", zIndex: "1000",
+    pointerEvents: "none",
+  });
+  document.body.appendChild(flying);
+  source.style.visibility = "hidden";
+  const dx = to.left + to.width / 2 + offset.x - (from.left + from.width / 2);
+  const dy = to.top + to.height / 2 + offset.y - (from.top + from.height / 2);
+  const scale = 49 / from.width;
+  const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : DISCARD_FLIGHT_MS;
+  try {
+    await flying.animate([
+      { transform: "translate(0, 0) scale(1) rotate(0deg)" },
+      { transform: `translate(${dx}px, ${dy}px) scale(${scale}) rotate(${offset.angle}deg)` },
+    ], { duration, easing: "cubic-bezier(0.22, 0.72, 0.22, 1)", fill: "forwards" }).finished;
+  } finally {
+    flying.remove();
+  }
 }
 
 type EntryMode = "create" | "join" | null;
@@ -98,10 +134,11 @@ function PlayingCard({
   );
 }
 
-function CardBack({ small = false }: { small?: boolean }) {
+function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string }) {
   return (
     <div
       className={`card-back ${small ? "card-small" : ""}`}
+      data-card-id={cardId}
       aria-label="Kort med baksidan upp"
     >
       <span>✳</span>
@@ -465,7 +502,7 @@ function Opponent({
     <div className={`opponent seat-${position} ${active ? "opponent-active" : ""}`} data-player-id={player.id}>
       <div className="opponent-cards">
         {player.hand.map((card) => (
-          <CardBack key={card.id} small />
+          <CardBack key={card.id} cardId={card.id} small />
         ))}
       </div>
       <div className="opponent-label">
@@ -501,7 +538,6 @@ function DiscardPile({ cards }: { cards: Card[] }) {
         </div>;
       })}
     </div>
-    <span>KASTHÖG · {cards.length}</span>
   </div>;
 }
 
@@ -520,7 +556,7 @@ function DeckPile({ cards }: { cards: Card[] }) {
 function playedOffset(index: number, cardId: string) {
   const variation = cardLanding(cardId);
   return {
-    x: -18 + index * 9 + variation.x / 3,
+    x: -30 + index * 15 + variation.x / 3,
     y: -10 + index * 5 + variation.y / 3,
     angle: [-4, 1, -2, 3, 0][index] + variation.rotation / 2,
   };
@@ -618,6 +654,8 @@ function Table({
   onToggle,
   onExchange,
   onKeep,
+  exchangeBusy,
+  visibleDiscard,
   onPlayTrickCard,
   flight,
   reviewedTrickCount,
@@ -630,6 +668,8 @@ function Table({
   onToggle: (id: string) => void;
   onExchange: () => void;
   onKeep: () => void;
+  exchangeBusy: boolean;
+  visibleDiscard: Card[];
   onPlayTrickCard: (id: string, from?: CardFlight["from"]) => void;
   flight: CardFlight | null;
   reviewedTrickCount: number;
@@ -646,6 +686,10 @@ function Table({
   const humanTurn = playingTricks && game.activePlayerId === local.id && !reviewingTrick && !flight;
   const lastTrick = game.completedTricks.at(-1);
   const nextLeader = game.players.find((player) => player.id === game.activePlayerId);
+  const firstTrickCard = game.currentTrick[0];
+  const leadPlayer = game.players.find((player) => player.id === (firstTrickCard?.playerId ?? game.activePlayerId));
+  const firstCardFlying = !!firstTrickCard && flight?.card.id === firstTrickCard.card.id;
+  const [suitNoticeCardId, setSuitNoticeCardId] = useState<string | null>(null);
   const pendingTrick = game.completedTricks.length > reviewedTrickCount;
   const currentCardIds = new Set((game.currentTrick.length
     ? game.currentTrick : pendingTrick ? lastTrick?.cards ?? [] : []).map((played) => played.card.id));
@@ -692,9 +736,16 @@ function Table({
     const timer = window.setTimeout(() => setShowExchangeFeedback(false), 2200);
     return () => window.clearTimeout(timer);
   }, [game.exchangeFeedback?.exchangeCount]);
+  useLayoutEffect(() => {
+    if (!firstTrickCard || firstCardFlying) return;
+    setSuitNoticeCardId(firstTrickCard.card.id);
+    const timer = window.setTimeout(() => setSuitNoticeCardId(null), 1100);
+    return () => window.clearTimeout(timer);
+  }, [firstTrickCard?.card.id, firstCardFlying]);
   const handAction = <button
     className="hand-action"
     onClick={selectionCount ? onExchange : onKeep}
+    disabled={exchangeBusy}
   >
     {selectionCount ? `Byt ${selectionCount} kort`
       : "Behåll handen"}
@@ -714,7 +765,7 @@ function Table({
             <span className="live-dot" /> Övningsbord
           </span>
         </div>
-        <button className="table-exit" onClick={onLeave}>
+        <button className="table-exit" onClick={onLeave} disabled={exchangeBusy}>
           Lämna spel <span>↗</span>
         </button>
       </header>
@@ -722,6 +773,7 @@ function Table({
         <section className="felt-wrap">
           <div className={`felt ${exchanging ? "" : "felt-tricks"}`}>
             <div className="felt-line" />
+            {exchanging && <div className="exchange-round">Byte {game.exchangeCount + 1} av 3</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
               Byte {game.exchangeFeedback.exchangeCount} klart · {game.exchangeFeedback.changedCards === 0
                 ? "du behöll handen"
@@ -750,44 +802,25 @@ function Table({
               {exchanging ? <><div className="table-stacks">
                 <div className="stack-group">
                   <DeckPile cards={game.deck} />
-                  <span>
-                    KORTLEK <b>{game.deck.length}</b>
-                  </span>
                 </div>
                 <div className="stack-group">
-                  <DiscardPile cards={game.discard} />
+                  <DiscardPile cards={visibleDiscard} />
                 </div>
-              </div>
-              <div
-                className="center-note combination-note"
-                aria-live="polite"
-              >
-                <strong>
-                  {currentEvaluation?.label}
-                </strong>
-                <small className="exchange-help">Byte {game.exchangeCount + 1} av 3 · välj kort att byta</small>
               </div>
               </> : <div className="trick-view" aria-live="polite">
                 <div className="trick-discard"><DiscardPile cards={game.discard} /></div>
-                <span className="trick-kicker">
-                  {pendingTrick ? `STICK ${game.completedTricks.length} ${flight ? "AV 5" : "KLART"}` : playingTricks ? `STICK ${game.completedTricks.length + 1} AV 5` : "FEM STICK KLARA"}
-                </span>
-                <h2>{playingTricks
+                {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
+                  <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
+                {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
+                  suitNoticeCardId === firstTrickCard.card.id &&
+                  <div className="trick-cue trick-suit-cue">Första kortet sätter följdfärgen: <strong>{suitSymbol[firstTrickCard.card.suit]}</strong></div>}
+                {(game.tableStage === "result" || reviewingTrick || (playingTricks && game.currentTrick.length > 0 && humanTurn && suitNoticeCardId !== firstTrickCard?.card.id)) && <h2>{playingTricks
                   ? reviewingTrick
                     ? flight ? "Kortet läggs…" : `${nextLeader?.name} vann stick ${game.completedTricks.length}`
                     : game.currentTrick.length
                     ? `Följ ${suitSymbol[game.currentTrick[0].card.suit]} om du kan`
-                    : `${nextLeader?.name ?? "Nästa spelare"} leder sticket`
-                  : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är klar"}</h2>
-                {playingTricks && <div className="trick-status">
-                  {reviewingTrick
-                    ? flight ? "" : `${nextLeader?.name} leder nästa stick · fortsätter strax…`
-                    : `${game.currentTrick.length} av ${game.players.length} kort spelade · ${nextLeader?.name} på tur`}
-                </div>}
-                {lastTrick && !pendingTrick && !flight && <div className="last-trick-note">
-                  {game.currentTrick.length === 0 ? "Senaste stick: " : "Föregående stick: "}
-                  {game.players.find((player) => player.id === lastTrick.winnerId)?.name} vann
-                </div>}
+                    : ""
+                  : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är klar"}</h2>}
                 {game.tableStage === "result" && !pendingTrick && !flight && <div className="round-summary">
                   <div><span>SISTA STICKET</span><strong>{finalTrickWinner?.name} · +{game.finalTrickAward?.points ?? 0} p</strong></div>
                   <div><span>BÄSTA SLUTHAND</span><strong>{finalAward?.winnerId
@@ -803,6 +836,7 @@ function Table({
               </div>}
             </div>
             <div className="your-area">
+              {exchanging && <div className="hand-combination" aria-live="polite">{currentEvaluation?.label}</div>}
               {!exchanging && <div className="your-label">
                 <Avatar player={local} size="small" />
                 <span>
@@ -828,7 +862,7 @@ function Table({
                     selected={exchanging && game.selectedCardIds.includes(card.id)}
                     unavailable={playingTricks && (!humanTurn || !legalTrickIds.has(card.id))}
                     onClick={
-                      game.tableStage === "result" || (playingTricks && !humanTurn) ? undefined
+                      game.tableStage === "result" || exchangeBusy || (playingTricks && !humanTurn) ? undefined
                         : playingTricks ? () => {
                           if (suppressClickRef.current === card.id) { suppressClickRef.current = null; return; }
                           onPlayTrickCard(card.id);
@@ -857,14 +891,7 @@ function Table({
                 ))}
               </div>
               {exchanging && handAction}
-              {!exchanging && <div className={`selection-count ${game.trickError ? "selection-error" : ""}`} role="status">
-                {game.trickError ?? (game.tableStage === "result"
-                  ? "Fem stick spelade · se resultatet ovan"
-                  : reviewingTrick ? `${nextLeader?.name} vann och leder nästa stick`
-                  : playingTricks
-                    ? !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} lägger kort…` : "Klicka på ett kort eller dra det till bordet"
-                    : "")}
-              </div>}
+              {game.trickError && <div className="selection-count selection-error" role="status">{game.trickError}</div>}
             </div>
           </div>
         </section>
@@ -901,7 +928,7 @@ function Table({
           </div>}
           <div className="table-controls">
             <span>LOKAL FÖRHANDSVISNING</span>
-            <button onClick={onLobby}>
+            <button onClick={onLobby} disabled={exchangeBusy}>
               ← <span>Till väntrummet</span>
             </button>
           </div>
@@ -919,9 +946,41 @@ export default function App() {
   const [game, setGame] = useState<GameState | null>(null);
   const [flight, setFlight] = useState<CardFlight | null>(null);
   const [reviewedTrickCount, setReviewedTrickCount] = useState(0);
+  const [exchangeBusy, setExchangeBusy] = useState(false);
+  const [previewDiscard, setPreviewDiscard] = useState<Card[] | null>(null);
   const gameRef = useRef(game);
   const busyRef = useRef(false);
   gameRef.current = game;
+
+  async function finishHumanExchange() {
+    const current = gameRef.current;
+    if (!current || busyRef.current || current.tableStage !== "exchange") return;
+    const next = current.selectedCardIds.length ? exchangeSelectedCards(current) : keepHand(current);
+    if (next === current) return;
+    busyRef.current = true;
+    setExchangeBusy(true);
+    const settled = [...current.discard];
+    setPreviewDiscard(settled);
+    try {
+      for (const player of current.players) {
+        const nextHand = new Set(next.players.find((candidate) => candidate.id === player.id)?.hand.map((card) => card.id));
+        const thrown = player.hand.filter((card) => !nextHand.has(card.id));
+        if (!thrown.length) continue;
+        await Promise.all(thrown.map((card, index) =>
+          flyDiscard(card, player.id, settled.length + index, player.isLocal)));
+        settled.push(...thrown);
+        setPreviewDiscard([...settled]);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    } finally {
+      gameRef.current = next;
+      setGame(next);
+      setPreviewDiscard(null);
+      setExchangeBusy(false);
+      busyRef.current = false;
+      document.querySelectorAll<HTMLElement>("[data-card-id]").forEach((node) => { node.style.visibility = ""; });
+    }
+  }
 
   function playOneCard(next: GameState, from: CardFlight["from"] | null) {
     const previous = gameRef.current;
@@ -1017,10 +1076,10 @@ export default function App() {
       onToggle={(id) =>
         setGame((current) => current && toggleCard(current, id))
       }
-      onExchange={() =>
-        setGame((current) => current && exchangeSelectedCards(current))
-      }
-      onKeep={() => setGame((current) => current && keepHand(current))}
+      onExchange={finishHumanExchange}
+      onKeep={finishHumanExchange}
+      exchangeBusy={exchangeBusy}
+      visibleDiscard={previewDiscard ?? game.discard}
       onPlayTrickCard={playHumanCard}
       flight={flight}
       reviewedTrickCount={reviewedTrickCount}
