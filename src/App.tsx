@@ -38,7 +38,7 @@ function Brand({ light = false }: { light?: boolean }) {
     <div className={`brand ${light ? "brand-light" : ""}`}>
       <span className="brand-mark">✳</span>
       <span>
-        chicago<span className="brand-dot">.</span>
+        chicappd<span className="brand-dot">.</span>
       </span>
     </div>
   );
@@ -145,7 +145,7 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
             runt <em>bordet.</em>
           </h1>
           <p>
-            Ett digitalt bord för era Chicago-kvällar. Skapa ett rum, samla ditt
+            Ett digitalt bord för era kortkvällar. Skapa ett rum, samla ditt
             sällskap och gör er redo för nästa giv.
           </p>
           <div className="hero-actions">
@@ -871,7 +871,7 @@ function Table({
           <div className="sidebar-top">
             <span className="sidebar-eyebrow">SPELBORD</span>
             <h1>
-              Chicago<span>.</span>
+              Chicappd<span>.</span>
             </h1>
             <p>Fem kort på hand. Resten bestämmer ni tillsammans.</p>
           </div>
