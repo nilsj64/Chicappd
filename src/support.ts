@@ -18,34 +18,34 @@ export function supportAdvice(view: GameView, viewerId: string): SupportAdvice {
 
   if (view.tableStage === "exchange") {
     const hand = player.hand;
-    if (hand.length !== 5) return { context: "Vänta på nästa hand.", tips: [] };
+    if (hand.length !== 5) return { context: "Vänta på att korten delas ut.", tips: [] };
     if (view.exchangeSubmittedPlayerIds.includes(viewerId)) return {
-      context: `Byte ${view.exchangeCount + 1} av 3. Ditt val är klart; vänta på övriga spelare.`,
+      context: `Kortbyte ${view.exchangeCount + 1} av 3. Du är klar; vänta på de andra spelarna.`,
       tips: [],
     };
     const evaluation = evaluateHand(hand);
     const discards = new Set(chooseBotDiscards(hand));
     const keep = hand.filter((card) => !discards.has(card.id));
     const change = hand.filter((card) => discards.has(card.id));
-    const context = `Byte ${view.exchangeCount + 1} av 3. Efter byte 1 och 2 får bästa handens kombination poäng; sluthanden bedöms efter sticken. Välj kort att byta, eller behåll handen.`;
+    const context = `Kortbyte ${view.exchangeCount + 1} av 3. Bästa handen ger poäng efter första och andra bytet. Händerna vid rundans slut jämförs efter sticken. Välj kort att byta eller behåll handen.`;
     if (!change.length) return { context, tips: [{ cardIds: keep.map((card) => card.id), text: `${evaluation.label}: behåll gärna alla fem kort. En färdig kombination är värd att skydda.` }] };
     const made = evaluation.strength > 0;
     return { context, tips: [
-      { cardIds: keep.map((card) => card.id), text: `Behåll gärna ${cardsText(keep)}: ${made ? `${evaluation.label} bygger på dessa kort.` : "de är dina högsta kort i en hand utan kombination."}` },
+      { cardIds: keep.map((card) => card.id), text: `Behåll gärna ${cardsText(keep)}: ${made ? `${evaluation.label} bygger på dessa kort.` : "det är dina högsta kort just nu."}` },
       { cardIds: change.map((card) => card.id), text: `Överväg att byta ${cardsText(change)}: ${made ? "de behövs inte för din nuvarande kombination." : "lägre kort ger utrymme att förbättra handen."}` },
     ] };
   }
 
   if (view.tableStage === "result") return {
-    context: `Givens poäng är klara: handpoäng efter byte 1 och 2 och för sluthanden, plus ${finalTrickPoints()} poäng för sista sticket.`,
+    context: `Rundan är slut. Bästa handen efter första och andra bytet och vid rundans slut gav poäng. Sista sticket gav ${finalTrickPoints()} poäng.`,
     tips: [],
   };
 
   const last = view.completedTricks.length === 4;
   const led = view.currentTrick[0]?.card.suit ?? null;
-  const context = `${last ? `Sista sticket ger ${finalTrickPoints()} poäng. ` : "De första fyra sticken ger inga poäng. "}${led ? `Du måste följa ${suitSymbol[led]} om du kan; bara ledd färg kan vinna.` : "Den som leder väljer färg; högsta kortet i den färgen vinner."}`;
+  const context = `${last ? `Sista sticket ger ${finalTrickPoints()} poäng. ` : "De första fyra sticken ger inga poäng. "}${led ? `Du måste följa ${suitSymbol[led]} om du kan. Bara kort i den färgen kan vinna sticket.` : "Den som spelar ut bestämmer färg. Högsta kortet i den färgen vinner."}`;
   if (view.waitingForNextTrick || view.activePlayerId !== viewerId || !player.hand.length)
-    return { context, tips: [{ cardIds: [], text: "Vänta på din tur; vinnaren av sticket leder nästa." }] };
+    return { context, tips: [{ cardIds: [], text: "Vänta på din tur. Den som vinner sticket spelar ut i nästa." }] };
 
   const legal = legalCards(player.hand, led).sort((a, b) => cardValue(a) - cardValue(b));
   const low = legal[0];
@@ -54,8 +54,8 @@ export function supportAdvice(view: GameView, viewerId: string): SupportAdvice {
     const high = legal.at(-1)!;
     return { context, tips: [
       { cardIds: [last ? high.id : low.id], text: last
-        ? `${cardsText([high])} ger dig en stark utgång i poängsticket, men andra kan fortfarande slå kortet.`
-        : `${cardsText([low])} leder lågt och sparar högre kort till senare stick.` },
+        ? `${cardsText([high])} är ett starkt kort att spela ut i sista sticket, men någon kan fortfarande slå det.`
+        : `Spela ut ${cardsText([low])} och spara högre kort till senare stick.` },
       ...(last && high.id !== low.id ? [{ cardIds: [low.id], text: `${cardsText([low])} är ett försiktigare alternativ om du vill spara ett starkare kort.` }] : []),
     ] };
   }
@@ -71,7 +71,7 @@ export function supportAdvice(view: GameView, viewerId: string): SupportAdvice {
   if (last && cheapestWinner)
     tips.push({ cardIds: [cheapestWinner.id], text: winningText! });
   if (!cheapestWinner || low.id !== cheapestWinner.id)
-    tips.push({ cardIds: [low.id], text: `${cardsText([low])} är ett lågt lagligt val som sparar starkare kort${low.suit !== led ? "; du kan inte följa färg" : ""}.` });
+    tips.push({ cardIds: [low.id], text: `${cardsText([low])} är ditt lägsta spelbara kort. Du sparar starkare kort${low.suit !== led ? "; du har inget kort i färgen som spelades ut" : ""}.` });
   if (!last && cheapestWinner && lastToPlay)
     tips.push({ cardIds: [cheapestWinner.id], text: winningText! });
   if (!tips.length && cheapestWinner)

@@ -1006,7 +1006,7 @@ p {
 }
 .round-summary {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   width: min(100%, 410px);
   margin-top: 10px;
   text-align: left;
@@ -1014,26 +1014,30 @@ p {
 .round-summary > div {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 9px 12px;
+  gap: 5px;
+  padding: 12px 14px;
   border: 1px solid #ffffff35;
   border-radius: 8px;
   background: #173e3599;
 }
 .round-summary span {
   color: #d8cf9c;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
 }
 .round-summary strong {
   color: #f5eedb;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 16px;
+  line-height: 1.45;
 }
 .round-summary small {
   color: #e1e9d8;
-  font-size: 11px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.round-hands {
+  gap: 6px;
 }
 .button-next-round {
   width: 100%;
@@ -1802,6 +1806,38 @@ input:focus-visible {
   }
   .table-center-tricks {
     width: min(100%, 480px);
+  }
+  .felt-tricks.felt-result {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 22px;
+  }
+  .felt-tricks.felt-result .opponents {
+    display: flex;
+    grid-column: 1;
+    grid-row: 1;
+    align-items: start;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .felt-tricks.felt-result .opponent {
+    width: auto;
+    min-width: 0;
+    flex: 1;
+    transform: none;
+  }
+  .felt-tricks.felt-result .opponent-cards,
+  .felt-tricks.felt-result .opponent .played-stack {
+    display: none;
+  }
+  .felt-tricks.felt-result .table-center {
+    grid-column: 1;
+    grid-row: 2;
+    width: min(100%, 410px);
+  }
+  .felt-tricks.felt-result .your-area {
+    grid-column: 1;
+    grid-row: 3;
   }
   .trick-discard {
     transform: scale(.85);

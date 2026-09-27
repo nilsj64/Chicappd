@@ -224,7 +224,7 @@ function scorePokerHands(
     handAwards: [...game.handAwards, award],
     activity: [...game.activity, winnerId
       ? `${best!.name} har bäst hand efter byte ${exchangeCount}: ${evaluations[winnerId].label} (+${points} p)`
-      : `Ingen handpoäng efter byte ${exchangeCount}`],
+      : `Ingen fick poäng för handen efter byte ${exchangeCount}`],
   };
 }
 
@@ -325,7 +325,7 @@ function finishExchange(game: GameState): GameState {
     ...exchanged,
     finalHands: Object.fromEntries(exchanged.players.map((player) => [player.id, [...player.hand]])),
     tableStage: "tricks",
-    activity: [...exchanged.activity, "Kortbytet är klart · stickspel börjar"],
+    activity: [...exchanged.activity, "Kortbytena är klara · nu börjar sticken"],
   });
 }
 
@@ -417,7 +417,7 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
       selectedCardIds: [],
       trickError: null,
       finalTrickAward: { winnerId, points },
-      activity: [...activity, `${winnerName} vinner sista sticket (+${points} p)`],
+      activity: [...activity, `${winnerName} vann sista sticket (+${points} p)`],
     };
     return afterTrick.finalHands
       ? scorePokerHands(afterTrick, 3, afterTrick.finalHands)
@@ -433,7 +433,7 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
     waitingForNextTrick: true,
     selectedCardIds: [],
     trickError: null,
-    activity: [...activity, `${winnerName} vinner stick ${completedTricks.length}`],
+    activity: [...activity, `${winnerName} vann stick ${completedTricks.length}`],
   };
 }
 
@@ -554,7 +554,7 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
         Object.fromEntries(next.players.map((p) => [p.id, p.hand])));
       return { ...next, finalHands: Object.fromEntries(next.players.map((p) => [p.id, [...p.hand]])),
         tableStage: "tricks", activePlayerId: next.players[0].id,
-        activity: [...next.activity, "Kortbytet är klart · stickspel börjar"] };
+        activity: [...next.activity, "Kortbytena är klara · nu börjar sticken"] };
     }
     case "play-card":
       return actor.id === game.activePlayerId && game.phase === "table" ? playCard(game, actor.id, command.cardId) : game;

@@ -18,6 +18,12 @@ type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; he
 const CARD_FLIGHT_MS = 360;
 const BOT_PAUSE_MS = 290;
 const TRICK_REVIEW_MS = 1300;
+const suitName: Record<Card["suit"], string> = {
+  spades: "spader", hearts: "hjärter", diamonds: "ruter", clubs: "klöver",
+};
+const rankName: Partial<Record<Card["rank"], string>> = {
+  J: "knekt", Q: "dam", K: "kung", A: "ess",
+};
 
 function cardOrigin(selector: string): CardFlight["from"] | null {
   const rect = document.querySelector(selector)?.getBoundingClientRect();
@@ -76,7 +82,7 @@ function PlayingCard({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
-      aria-label={`${card.rank} ${card.suit}${selected ? ", vald" : ""}`}
+      aria-label={`${rankName[card.rank] ?? card.rank} i ${suitName[card.suit]}${selected ? ", valt" : ""}`}
       aria-pressed={selected}
       disabled={!onClick || unavailable}
     >
@@ -98,7 +104,7 @@ function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string 
     <div
       className={`card-back ${small ? "card-small" : ""}`}
       data-card-id={cardId}
-      aria-label="Kort med baksidan upp"
+      aria-label="Kort med baksidan uppåt"
     >
       <span>✳</span>
     </div>
@@ -131,7 +137,7 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
       <header className="landing-header page-width">
         <Brand />
         <span className="header-note">
-          En kortkväll, var ni än är <span>✳</span>
+          Kortkväll tillsammans, var ni än är <span>✳</span>
         </span>
       </header>
       <main className="landing-main page-width">
@@ -145,21 +151,21 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
             runt <em>bordet.</em>
           </h1>
           <p>
-            Ett digitalt bord för era kortkvällar. Skapa ett rum, samla ditt
-            sällskap och gör er redo för nästa giv.
+            Samla vännerna kring ett digitalt kortbord. Skapa ett rum och
+            börja spela tillsammans.
           </p>
           <div className="hero-actions">
             <button
               className="button button-primary"
               onClick={() => onEnter("create")}
             >
-              Skapa spel <span aria-hidden="true">↗</span>
+              Skapa rum <span aria-hidden="true">↗</span>
             </button>
             <button
               className="button button-secondary"
               onClick={() => onEnter("join")}
             >
-              Gå med i spel <span aria-hidden="true">→</span>
+              Gå med i ett rum <span aria-hidden="true">→</span>
             </button>
           </div>
           <div className="hero-footnote">
@@ -192,7 +198,7 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
       </main>
       <footer className="landing-footer page-width">
         <span>♠ ♥ ♦ ♣</span>
-        <span>Gjort för spelkvällar tillsammans.</span>
+        <span>För spelkvällar tillsammans.</span>
       </footer>
     </div>
   );
@@ -240,8 +246,8 @@ function Entry({
           </h1>
           <p>
             {joining
-              ? "Ange rumskoden du fått av den som skapade spelet."
-              : "Skapa ett privat spelrum och dela koden med dina vänner."}
+              ? "Skriv in koden du fick av den som skapade rummet."
+              : "Skapa ett privat rum och dela koden med dina vänner."}
           </p>
           <div className="entry-deco">
             ♣ <span>♦</span> ♠ <span>♥</span>
@@ -263,9 +269,9 @@ function Entry({
         >
           <div className="form-icon">✳</div>
           <div className="form-kicker">
-            {joining ? "GÅ MED I SPEL" : "SKAPA SPEL"}
+            {joining ? "GÅ MED I RUM" : "SKAPA RUM"}
           </div>
-          <h2>{joining ? "Välkommen in" : "Ditt spelrum"}</h2>
+          <h2>{joining ? "Gå med i ett rum" : "Skapa ett rum"}</h2>
           <label htmlFor="player-name">Vad heter du?</label>
           <input
             id="player-name"
@@ -298,10 +304,10 @@ function Entry({
             className="button button-primary form-submit"
             type="submit"
           >
-            {joining ? "Gå med i rum" : "Skapa rum"} <span>↗</span>
+            {joining ? "Gå med i rummet" : "Skapa rummet"} <span>↗</span>
           </button>
           <p className="form-note">
-            Lokal förhandsvisning · riktiga inbjudningar kommer senare
+            Lokal förhandsvisning · ni kan ännu inte spela tillsammans online
           </p>
         </form>
       </main>
@@ -318,14 +324,14 @@ function Seat({ player, index, viewerId }: { player?: PlayerView; index: number;
           <Avatar player={player} viewerId={viewerId} />
           <div className="seat-name">{player.name}</div>
           <div className="seat-detail">
-            {player.id === viewerId ? "Du" : player.control === "bot" ? "Demospelare" : "Spelare"}
+            {player.id === viewerId ? "Du" : player.control === "bot" ? "Datorspelare" : "Spelare"}
           </div>
         </>
       ) : (
         <>
           <span className="empty-avatar">+</span>
           <div className="seat-name">Ledig plats</div>
-          <div className="seat-detail">Väntar på spelare</div>
+          <div className="seat-detail">Ingen sitter här än</div>
         </>
       )}
     </div>
@@ -371,7 +377,7 @@ function Lobby({
           <h1>
             Välkommen till <em>bordet.</em>
           </h1>
-          <p>Samla sällskapet. När ni är redo börjar kortkvällen.</p>
+          <p>Bjud in ditt sällskap eller lägg till datorspelare. Sedan kan du börja.</p>
         </div>
         <div className="lobby-content">
           <section className="lobby-panel">
@@ -393,7 +399,7 @@ function Lobby({
                 onClick={onAddDemo}
                 disabled={game.players.length >= 4 || game.ownerId !== viewerId}
               >
-                + Lägg till demospelare
+                + Lägg till datorspelare
               </button>
             </div>
           </section>
@@ -403,7 +409,7 @@ function Lobby({
             <h2>
               Dela koden
               <br />
-              med ditt gäng.
+              med vännerna.
             </h2>
             <div className="room-code-label">RUMSKOD</div>
             <button
@@ -415,7 +421,7 @@ function Lobby({
               <span className="copy-icon">{copied ? "✓" : "⧉"}</span>
             </button>
             <p>
-              {copied ? "Koden kopierad!" : "Klicka på koden för att kopiera."}
+              {copied ? "Koden är kopierad!" : "Tryck på koden för att kopiera den."}
             </p>
             <div className="room-rule">
               <span className="room-code-label">POÄNGREGEL</span>
@@ -426,12 +432,12 @@ function Lobby({
               onClick={onStart}
               disabled={game.players.length < 2 || game.ownerId !== viewerId}
             >
-              Till spelbordet <span>→</span>
+              Börja spela <span>→</span>
             </button>
             <small>
               {game.players.length < 2
-                ? "Lägg till minst en demospelare för att börja."
-                : "Börja en övningsgiv med fem kort var."}
+                ? "Lägg till minst en datorspelare för att börja."
+                : "Starta en övningsrunda med fem kort var."}
             </small>
           </aside>
         </div>
@@ -474,7 +480,7 @@ function Opponent({
         <Avatar player={player} viewerId={viewerId} size="small" />
         <span>
           <strong>{player.name}</strong>
-          <small>{active ? "Aktiv spelare" : "Vid bordet"}</small>
+          <small>{active ? "Spelar nu" : "Vid bordet"}</small>
         </span>
       </div>
       {announcement && <div className="opponent-announcement">{announcement}</div>}
@@ -493,7 +499,7 @@ function pileOffset(index: number) {
 }
 
 function DiscardPile({ count }: { count: number }) {
-  return <div className="discard-pile" aria-label={`Kasthög med ${count} bortbytta kort`}>
+  return <div className="discard-pile" aria-label={`Hög med ${count} bortbytta kort`}>
     <div className="physical-pile discard-pile-cards">
       {Array.from({ length: count }, (_, index) => {
         const offset = pileOffset(index);
@@ -507,7 +513,7 @@ function DiscardPile({ count }: { count: number }) {
 }
 
 function DeckPile({ count }: { count: number }) {
-  return <div className="physical-pile deck-pile" aria-label={`Kortlek med ${count} kort`}>
+  return <div className="physical-pile deck-pile" aria-label={`Kortlek med ${count} kort kvar`}>
     {Array.from({ length: count }, (_, index) => {
       const offset = pileOffset(index);
       return <div className="physical-pile-card" key={index}
@@ -608,7 +614,7 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
         ))}
       </div>
       <div className="score-foot">
-        Bästa hand efter byte 1 och 2, sluthanden samt sista sticket ger poäng.
+        Poäng delas ut för bästa handen efter första och andra bytet samt efter sticken. Sista sticket ger också poäng.
       </div>
     </aside>
   );
@@ -733,20 +739,20 @@ function Table({
           <span className="table-room">RUM {game.roomCode}</span>
           <span className="table-header-divider" />
           <span>
-            <span className="live-dot" /> Övningsbord
+            <span className="live-dot" /> Övningsspel
           </span>
         </div>
         <button className="table-exit" onClick={onLeave} disabled={exchangeBusy}>
-          Lämna spel <span>↗</span>
+          Lämna spelet <span>↗</span>
         </button>
       </header>
       <main className="table-layout">
         <section className="felt-wrap">
-          <div className={`felt ${exchanging ? "" : "felt-tricks"}`}>
+          <div className={`felt ${exchanging ? "" : "felt-tricks"} ${game.tableStage === "result" && !pendingTrick && !flight ? "felt-result" : ""}`}>
             <div className="felt-line" />
-            {exchanging && <div className="exchange-round">Byte {game.exchangeCount + 1} av 3</div>}
+            {exchanging && <div className="exchange-round">Kortbyte {game.exchangeCount + 1} av 3</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
-              Byte {game.exchangeFeedback.exchangeCount} klart · {game.exchangeFeedback.changedCards === 0
+              Kortbyte {game.exchangeFeedback.exchangeCount} klart · {game.exchangeFeedback.changedCards === 0
                 ? "du behöll handen"
                 : `du bytte ${game.exchangeFeedback.changedCards} kort`}
             </div>}
@@ -785,24 +791,24 @@ function Table({
                   <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
                 {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
                   suitNoticeCardId === firstTrickCard.card.id &&
-                  <div className="trick-cue trick-suit-cue">Första kortet sätter följdfärgen: <strong>{suitSymbol[firstTrickCard.card.suit]}</strong></div>}
+                  <div className="trick-cue trick-suit-cue">Följ färgen om du kan: <strong>{suitSymbol[firstTrickCard.card.suit]}</strong></div>}
                 {(game.tableStage === "result" || reviewingTrick || (playingTricks && game.currentTrick.length > 0 && humanTurn && suitNoticeCardId !== firstTrickCard?.card.id)) && <h2>{playingTricks
                   ? reviewingTrick
-                    ? flight ? "Kortet läggs…" : `${nextLeader?.name} vann stick ${game.completedTricks.length}`
+                    ? flight ? "Kortet spelas…" : `${nextLeader?.name} vann stick ${game.completedTricks.length}`
                     : game.currentTrick.length
                     ? `Följ ${suitSymbol[game.currentTrick[0].card.suit]} om du kan`
                     : ""
-                  : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är klar"}</h2>}
+                  : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är slut"}</h2>}
                 {game.tableStage === "result" && !pendingTrick && !flight && <div className="round-summary">
                   <div><span>SISTA STICKET</span><strong>{finalTrickWinner?.name} · +{game.finalTrickAward?.points ?? 0} p</strong></div>
-                  <div><span>BÄSTA SLUTHAND</span><strong>{finalAward?.winnerId
+                  <div><span>BÄSTA HANDEN VID RUNDANS SLUT</span><strong>{finalAward?.winnerId
                     ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalAward.evaluations[finalAward.winnerId].label} · +${finalAward.points} p`
-                    : "Ingen kvalificerande vinnare · 0 p"}</strong></div>
-                  <div className="round-hands"><span>SLUTHÄNDER</span>{game.players.map((player) => <small key={player.id}>
+                    : "Ingen fick poäng för handen · 0 p"}</strong></div>
+                  <div className="round-hands"><span>HÄNDER VID RUNDANS SLUT</span>{game.players.map((player) => <small key={player.id}>
                     {player.name}: {finalAward?.evaluations[player.id]?.label}
                   </small>)}</div>
                   <button className="button button-next-round" onClick={onNextRound}>
-                    Nästa giv <span aria-hidden="true">→</span>
+                    Spela en runda till <span aria-hidden="true">→</span>
                   </button>
                 </div>}
               </div>}
@@ -819,8 +825,8 @@ function Table({
                     {game.tableStage === "result"
                       ? "Alla fem stick spelade"
                       : reviewingTrick ? "Nästa stick börjar snart"
-                      : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} lägger kort…`
-                      : "Klicka på ett kort eller dra det till bordet"}
+                      : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} spelar…`
+                      : "Tryck på ett kort eller dra det till bordet"}
                   </small>
                 </span>
               </div>}
@@ -873,13 +879,13 @@ function Table({
             <h1>
               Chicappd<span>.</span>
             </h1>
-            <p>Fem kort på hand. Resten bestämmer ni tillsammans.</p>
+            <p>Fem kort på hand. Vem vinner rundan?</p>
           </div>
           <button type="button" className="support-toggle" aria-expanded={supportOpen}
             aria-controls="support-sheet" onClick={() => setSupportOpen((open) => !open)}>
-            <span>Tips &amp; hjälp</span><span>{supportOpen ? "Dölj −" : "Visa +"}</span>
+            <span>Tips och regler</span><span>{supportOpen ? "Dölj −" : "Visa +"}</span>
           </button>
-          {supportOpen && advice && <section id="support-sheet" className="support-sheet" aria-label="Tips och hjälp" aria-live="polite">
+          {supportOpen && advice && <section id="support-sheet" className="support-sheet" aria-label="Tips och regler" aria-live="polite">
             <p>{advice.context}</p>
             {advice.tips.map((tip, index) => <div className="support-tip" key={index}>
               <span>{game.tableStage === "exchange" ? (index === 0 ? "BEHÅLL GÄRNA" : "ÖVERVÄG ATT BYTA") : (index === 0 ? "FÖRSLAG" : "ALTERNATIV")}</span>
@@ -900,7 +906,7 @@ function Table({
           {(!exchanging || game.activity.length > 0) && <div className={`table-activity ${exchanging ? "table-activity-quiet" : ""}`} aria-live="polite">
             <span>SENASTE HÄNDELSER</span>
             {game.activity.length === 0 ? (
-              <p>Välj kort att byta eller behåll handen för att börja.</p>
+              <p>Välj kort att byta eller behåll handen.</p>
             ) : (
               <ul>
                 {game.activity.slice(-8).map((event, index) => (
@@ -916,7 +922,7 @@ function Table({
             </button>
           </div>
           <div className="sidebar-bottom">
-            En första version för er nästa spelkväll. <span>♥</span>
+            En förhandsvisning för spelkvällen. <span>♥</span>
           </div>
         </aside>
       </main>
