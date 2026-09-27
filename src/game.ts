@@ -91,7 +91,7 @@ export function createDeck(): Card[] {
 function shuffled(cards: Card[]): Card[] {
   const next = [...cards];
   for (let i = next.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
     [next[i], next[j]] = [next[j], next[i]];
   }
   return next;
@@ -493,7 +493,7 @@ export function randomRoomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from(
     { length: 5 },
-    () => alphabet[Math.floor(Math.random() * alphabet.length)],
+    () => alphabet[crypto.getRandomValues(new Uint32Array(1))[0] % alphabet.length],
   ).join("");
 }
 
@@ -529,7 +529,8 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
       return { ...game, players, ownerId: command.playerId === game.ownerId
         ? players.find((p) => p.control === "human")!.id : game.ownerId };
     case "start-round":
-      return command.actorId === game.ownerId ? startRound(game) : game;
+      return command.actorId === game.ownerId || (game.phase === "table" && game.tableStage === "result")
+        ? startRound(game) : game;
     case "return-lobby":
       return command.actorId === game.ownerId && game.phase === "table"
         ? { ...game, phase: "lobby", selectedCardIds: [], exchangeSubmittedPlayerIds: [] } : game;
@@ -570,6 +571,7 @@ export type GameView = Omit<GameState, "deck" | "discard" | "players" | "finalHa
   players: PlayerView[];
   deckCount: number;
   discardCount: number;
+  revision?: number;
   selectedCardIds: string[];
   trickError: string | null;
   exchangeFeedback: ExchangeFeedback | null;

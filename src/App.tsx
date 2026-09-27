@@ -13,6 +13,8 @@ import {
 import { legalCards } from "./tricks";
 import type { PlayedCard } from "./tricks";
 import { supportAdvice } from "./support";
+import { API_URL, commandOnline, enterOnline, loadOnline, savedSession, saveSession, watchOnline } from "./online";
+import type { OnlineSession } from "./online";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
@@ -30,10 +32,11 @@ function cardOrigin(selector: string): CardFlight["from"] | null {
   return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
 }
 
-type EntryMode = "create" | "join" | null;
+type EntryMode = "create" | "join" | "practice" | null;
 type RoomEntry =
   | { kind: "create" }
-  | { kind: "join"; code: string };
+  | { kind: "join"; code: string }
+  | { kind: "practice" };
 
 function FinalTrickRule() {
   return <span>Sista sticket: 5 p</span>;
@@ -159,18 +162,19 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
               className="button button-primary"
               onClick={() => onEnter("create")}
             >
-              Skapa rum <span aria-hidden="true">↗</span>
+              Skapa spel <span aria-hidden="true">↗</span>
             </button>
             <button
               className="button button-secondary"
               onClick={() => onEnter("join")}
             >
-              Gå med i ett rum <span aria-hidden="true">→</span>
+              Gå med i spel <span aria-hidden="true">→</span>
             </button>
           </div>
           <div className="hero-footnote">
-            <span className="footnote-icon">✦</span> Privata rum för 2–4 spelare
+            <span className="footnote-icon">✦</span> Onlinerum för två spelare
           </div>
+          <button className="text-button" onClick={() => onEnter("practice")}>Spela lokalt mot datorn →</button>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="art-ring art-ring-one" />
@@ -207,15 +211,18 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
 function Entry({
   mode,
   onBack,
-  onSubmit,
+  onSubmit, error, busy,
 }: {
   mode: Exclude<EntryMode, null>;
   onBack: () => void;
   onSubmit: (name: string, entry: RoomEntry) => void;
+  error: string | null;
+  busy: boolean;
 }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const joining = mode === "join";
+  const practicing = mode === "practice";
   return (
     <div className="entry-page">
       <header className="page-width inner-header">
@@ -247,7 +254,8 @@ function Entry({
           <p>
             {joining
               ? "Skriv in koden du fick av den som skapade rummet."
-              : "Skapa ett privat rum och dela koden med dina vänner."}
+              : practicing ? "Spela en övningsrunda mot datorn på den här enheten."
+              : "Skapa ett privat rum och dela koden med din medspelare."}
           </p>
           <div className="entry-deco">
             ♣ <span>♦</span> ♠ <span>♥</span>
@@ -263,15 +271,15 @@ function Entry({
                 code: code.trim().toUpperCase(),
               });
             } else {
-              onSubmit(name.trim() || "Du", { kind: "create" });
+              onSubmit(name.trim() || "Du", { kind: practicing ? "practice" : "create" });
             }
           }}
         >
           <div className="form-icon">✳</div>
           <div className="form-kicker">
-            {joining ? "GÅ MED I RUM" : "SKAPA RUM"}
+            {joining ? "GÅ MED I RUM" : practicing ? "LOKAL ÖVNING" : "SKAPA RUM"}
           </div>
-          <h2>{joining ? "Gå med i ett rum" : "Skapa ett rum"}</h2>
+          <h2>{joining ? "Gå med i ett rum" : practicing ? "Spela mot datorn" : "Skapa ett rum"}</h2>
           <label htmlFor="player-name">Vad heter du?</label>
           <input
             id="player-name"
@@ -302,13 +310,12 @@ function Entry({
           )}
           <button
             className="button button-primary form-submit"
-            type="submit"
+            type="submit" disabled={busy}
           >
-            {joining ? "Gå med i rummet" : "Skapa rummet"} <span>↗</span>
+            {joining ? "Gå med i rummet" : practicing ? "Starta lokal övning" : "Skapa rummet"} <span>↗</span>
           </button>
-          <p className="form-note">
-            Lokal förhandsvisning · ni kan ännu inte spela tillsammans online
-          </p>
+          {error && <p className="form-note" role="alert">{error}</p>}
+          <p className="form-note">{practicing || !API_URL ? "Lokal övning" : "Spela tillsammans online"}</p>
         </form>
       </main>
     </div>
@@ -343,10 +350,11 @@ function Lobby({
   viewerId,
   onAddDemo,
   onStart,
-  onLeave,
+  onLeave, online,
 }: {
   game: GameView;
   viewerId: string;
+  online: boolean;
   onAddDemo: () => void;
   onStart: () => void;
   onLeave: () => void;
@@ -377,30 +385,30 @@ function Lobby({
           <h1>
             Välkommen till <em>bordet.</em>
           </h1>
-          <p>Bjud in ditt sällskap eller lägg till datorspelare. Sedan kan du börja.</p>
+          <p>{online ? "Dela rumskoden med en vän. När ni båda är här kan ägaren starta." : "Lägg till en datorspelare för lokal övning."}</p>
         </div>
         <div className="lobby-content">
           <section className="lobby-panel">
             <div className="panel-topline">
               <span>SPELARE</span>
-              <span>{game.players.length} AV 4 PLATSER</span>
+              <span>{game.players.length} AV {online ? 2 : 4} PLATSER</span>
             </div>
             <div className="seats-grid">
-              {Array.from({ length: 4 }, (_, index) => (
+              {Array.from({ length: online ? 2 : 4 }, (_, index) => (
                 <Seat key={index} player={game.players[index]} index={index} viewerId={viewerId} />
               ))}
             </div>
             <div className="lobby-panel-bottom">
               <span>
-                <span className="status-dot" /> Lokal förhandsvisning
+                <span className="status-dot" /> {online ? "Onlinespel" : "Lokal övning"}
               </span>
-              <button
+              {!online && <button
                 className="small-button"
                 onClick={onAddDemo}
                 disabled={game.players.length >= 4 || game.ownerId !== viewerId}
               >
                 + Lägg till datorspelare
-              </button>
+              </button>}
             </div>
           </section>
           <aside className="room-panel">
@@ -436,8 +444,8 @@ function Lobby({
             </button>
             <small>
               {game.players.length < 2
-                ? "Lägg till minst en datorspelare för att börja."
-                : "Starta en övningsrunda med fem kort var."}
+                ? online ? "Vänta på den andra spelaren." : "Lägg till minst en datorspelare för att börja."
+                : online ? "Starta matchen med fem kort var." : "Starta en övningsrunda med fem kort var."}
             </small>
           </aside>
         </div>
@@ -635,10 +643,11 @@ function Table({
   onCardLanded,
   onNextRound,
   onLobby,
-  onLeave,
+  onLeave, online,
 }: {
   game: GameView;
   viewerId: string;
+  online: boolean;
   selectedCardIds: string[];
   onToggle: (id: string) => void;
   onExchange: () => void;
@@ -739,7 +748,7 @@ function Table({
           <span className="table-room">RUM {game.roomCode}</span>
           <span className="table-header-divider" />
           <span>
-            <span className="live-dot" /> Övningsspel
+            <span className="live-dot" /> {online ? "Onlinespel" : "Övningsspel"}
           </span>
         </div>
         <button className="table-exit" onClick={onLeave} disabled={exchangeBusy}>
@@ -916,13 +925,13 @@ function Table({
             )}
           </div>}
           <div className="table-controls">
-            <span>LOKAL FÖRHANDSVISNING</span>
-            <button onClick={onLobby} disabled={exchangeBusy}>
+            <span>{online ? "ONLINESPEL" : "LOKAL ÖVNING"}</span>
+            <button onClick={onLobby} disabled={exchangeBusy || (online && game.ownerId !== viewerId)}>
               ← <span>Till väntrummet</span>
             </button>
           </div>
           <div className="sidebar-bottom">
-            En förhandsvisning för spelkvällen. <span>♥</span>
+            Spela tillsammans. <span>♥</span>
           </div>
         </aside>
       </main>
@@ -931,19 +940,62 @@ function Table({
 }
 
 export default function App() {
-  // The preview owns authority locally. Table and Lobby receive only a viewer projection.
   const [mode, setMode] = useState<EntryMode>(null);
   const [game, setGame] = useState<GameState | null>(null);
-  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [remoteView, setRemoteView] = useState<GameView | null>(null);
+  const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(() => API_URL ? savedSession() : null);
+  const [viewerId, setViewerId] = useState<string | null>(() => API_URL ? savedSession()?.playerId ?? null : null);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [flight, setFlight] = useState<CardFlight | null>(null);
   const [reviewedTrickCount, setReviewedTrickCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState(false);
   const gameRef = useRef(game);
   const busyRef = useRef(false);
   gameRef.current = game;
-  const view = game && viewerId ? viewForPlayer(game, viewerId) : null;
+  const online = !!onlineSession;
+  const view = online ? remoteView : game && viewerId ? viewForPlayer(game, viewerId) : null;
+
+  useEffect(() => {
+    if (!onlineSession) return;
+    let active = true;
+    void loadOnline(onlineSession).then((next) => { if (active) setRemoteView((current) =>
+      (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current); })
+      .catch((cause) => { if (active) setError((cause as Error).message); });
+    const stop = watchOnline(onlineSession, (next) => { if (active) setRemoteView((current) =>
+      (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current); },
+      (value) => { if (active) setConnected(value); });
+    return () => { active = false; stop(); };
+  }, [onlineSession]);
+
+  async function send(command: object) {
+    if (!onlineSession || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await commandOnline(onlineSession, command);
+      setRemoteView((current) => (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current);
+    } catch (cause) {
+      setError((cause as Error).message);
+      try {
+        const next = await loadOnline(onlineSession);
+        setRemoteView((current) => (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current);
+      } catch { /* Reconnect will refresh. */ }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
 
   function finishHumanExchange() {
+    if (online) {
+      if (busyRef.current) return;
+      void send({ type: "exchange", discardIds: selectedCardIds });
+      setSelectedCardIds([]);
+      return;
+    }
     const current = gameRef.current;
     if (!current || !viewerId || busyRef.current) return;
     const next = applyCommand(current, { type: "exchange", actorId: viewerId, discardIds: selectedCardIds });
@@ -972,6 +1024,7 @@ export default function App() {
   }
 
   function playHumanCard(cardId: string, from?: CardFlight["from"]) {
+    if (online) { void send({ type: "play-card", cardId }); return; }
     const current = gameRef.current;
     if (!current || !viewerId || busyRef.current) return;
     const origin = from ?? cardOrigin(`.your-hand [data-card-id="${cardId}"]`);
@@ -979,7 +1032,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
+    if (online || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
     const active = game.players.find((player) => player.id === game.activePlayerId);
     if (!active || active.control !== "bot") return;
     const timer = window.setTimeout(() => {
@@ -989,45 +1042,82 @@ export default function App() {
       playOneCard(applyCommand(current, { type: "advance-bot", actorId: current.ownerId }), origin);
     }, BOT_PAUSE_MS);
     return () => window.clearTimeout(timer);
-  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId]);
+  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId, online]);
 
   useEffect(() => {
-    if (game?.phase !== "table" || !game.completedTricks.length ||
-      game.completedTricks.length <= reviewedTrickCount || flight) return;
+    if (view?.phase === "table" && view.tableStage === "exchange" &&
+      view.exchangeCount === 0 && view.completedTricks.length === 0) setReviewedTrickCount(0);
+  }, [view?.phase, view?.tableStage, view?.exchangeCount, view?.completedTricks.length]);
+
+  useEffect(() => {
+    if (view?.phase !== "table" || !view.completedTricks.length ||
+      view.completedTricks.length <= reviewedTrickCount || flight) return;
     const timer = window.setTimeout(() => {
-      setReviewedTrickCount(game.completedTricks.length);
-      setGame((current) => current?.waitingForNextTrick
+      setReviewedTrickCount(view.completedTricks.length);
+      if (!online) setGame((current) => current?.waitingForNextTrick
         ? applyCommand(current, { type: "continue-trick", actorId: current.ownerId }) : current);
     }, TRICK_REVIEW_MS);
     return () => window.clearTimeout(timer);
-  }, [game?.phase, game?.completedTricks.length, reviewedTrickCount, flight]);
+  }, [view?.phase, view?.completedTricks.length, reviewedTrickCount, flight, online]);
 
-  function enterRoom(name: string, entry: RoomEntry) {
-    // Joining still opens a local practice room until transport exists.
+  async function enterRoom(name: string, entry: RoomEntry) {
     busyRef.current = false;
     setFlight(null);
     setReviewedTrickCount(0);
     setSelectedCardIds([]);
-    const room = createRoom(name, entry.kind === "join" ? entry.code : randomRoomCode());
-    setViewerId(room.ownerId);
-    setGame(entry.kind === "join" ? applyCommand(room, { type: "add-bot", actorId: room.ownerId }) : room);
+    setError(null);
+    if (!API_URL && entry.kind !== "practice") {
+      setError("Onlinespel är inte konfigurerat ännu. Välj lokal övning under tiden.");
+      return;
+    }
+    if (API_URL && entry.kind !== "practice") {
+      setBusy(true);
+      try {
+        const result = await enterOnline(name, entry.kind === "join" ? entry.code : undefined);
+        setViewerId(result.session.playerId);
+        setRemoteView(result.view);
+        setOnlineSession(result.session);
+      } catch (cause) { setError((cause as Error).message); }
+      finally { setBusy(false); }
+    } else {
+      const room = createRoom(name, entry.kind === "join" ? entry.code : randomRoomCode());
+      setViewerId(room.ownerId);
+      setGame(entry.kind === "join" || entry.kind === "practice" ? applyCommand(room, { type: "add-bot", actorId: room.ownerId }) : room);
+    }
   }
-
+  function leave() {
+    busyRef.current = false;
+    setFlight(null);
+    setGame(null);
+    setRemoteView(null);
+    setOnlineSession(null);
+    saveSession(null);
+    setViewerId(null);
+    setMode(null);
+  }
+  if (onlineSession && !view) return <div className="entry-page"><div className="page-width entry-layout"><div>
+    <Brand /><h1>Återansluter till rummet…</h1>
+    {error && <p role="alert">{error}</p>}
+    <button className="button button-secondary" onClick={leave}>Till startsidan</button>
+  </div></div></div>;
   if (!view || !viewerId)
     return mode ? (
-      <Entry key={mode} mode={mode} onBack={() => setMode(null)} onSubmit={enterRoom} />
+      <Entry key={mode} mode={mode} onBack={() => setMode(null)} onSubmit={enterRoom} error={error} busy={busy} />
     ) : <Landing onEnter={setMode} />;
   if (view.phase === "lobby")
-    return <Lobby game={view} viewerId={viewerId}
+    return <><Lobby game={view} viewerId={viewerId} online={online}
       onAddDemo={() => setGame((current) => current && applyCommand(current, { type: "add-bot", actorId: viewerId }))}
       onStart={() => {
         setReviewedTrickCount(0);
-        setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
+        if (online) void send({ type: "start-round" });
+        else setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
       }}
-      onLeave={() => { setGame(null); setViewerId(null); setMode(null); }} />;
-  return <Table
+      onLeave={leave} />{error && <div className="network-message" role="alert">{error}</div>}
+      {online && !connected && <div className="network-message" role="status">Återansluter till spelservern…</div>}</>;
+  return <><Table
     game={view}
     viewerId={viewerId}
+    online={online}
     selectedCardIds={selectedCardIds}
     onToggle={(id) => {
       if (view.exchangeSubmittedPlayerIds.includes(viewerId)) return;
@@ -1036,7 +1126,7 @@ export default function App() {
     }}
     onExchange={finishHumanExchange}
     onKeep={finishHumanExchange}
-    exchangeBusy={view.exchangeSubmittedPlayerIds.includes(viewerId)}
+    exchangeBusy={busy || view.exchangeSubmittedPlayerIds.includes(viewerId)}
     visibleDiscard={view.discardCount}
     onPlayTrickCard={playHumanCard}
     flight={flight}
@@ -1044,12 +1134,15 @@ export default function App() {
     onCardLanded={() => { busyRef.current = false; setFlight(null); }}
     onNextRound={() => {
       busyRef.current = false; setFlight(null); setReviewedTrickCount(0); setSelectedCardIds([]);
-      setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
+      if (online) void send({ type: "start-round" });
+      else setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
     }}
     onLobby={() => {
       busyRef.current = false; setFlight(null); setSelectedCardIds([]);
-      setGame((current) => current && applyCommand(current, { type: "return-lobby", actorId: viewerId }));
+      if (online) void send({ type: "return-lobby" });
+      else setGame((current) => current && applyCommand(current, { type: "return-lobby", actorId: viewerId }));
     }}
-    onLeave={() => { busyRef.current = false; setFlight(null); setGame(null); setViewerId(null); setMode(null); }}
-  />;
+    onLeave={leave}
+  />{error && <div className="network-message" role="alert">{error}</div>}
+    {online && !connected && <div className="network-message" role="status">Återansluter till spelservern…</div>}</>;
 }
