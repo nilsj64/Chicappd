@@ -1417,6 +1417,36 @@ p {
   color: #7a8c7e;
   margin-bottom: 30px;
 }
+.support-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #d8e4d8;
+  border-radius: 8px;
+  background: #edf3e9;
+  color: #285b46;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.support-toggle:hover { background: #e2eddf; }
+.support-toggle:focus-visible { outline: 3px solid #a3c7a7; outline-offset: 2px; }
+.support-sheet {
+  padding: 13px;
+  margin: 0 0 14px;
+  border: 1px solid #e1e6dc;
+  border-radius: 9px;
+  background: #fffefa;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.support-sheet > p { color: #496a58; margin-bottom: 11px; }
+.support-tip { border-top: 1px solid #e9eee7; padding-top: 10px; margin-top: 10px; }
+.support-tip span { color: #9b765f; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+.support-tip p { margin: 4px 0 0; }
 .score-panel {
   background: #fffefa;
   border: 1px solid #e1e6dc;

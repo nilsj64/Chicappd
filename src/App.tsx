@@ -1,68 +1,27 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { evaluateHand } from "./poker";
-import type { Card, GameState, Player } from "./game";
+import type { Card, GameState, GameView, PlayerView } from "./game";
 import {
-  addDemoPlayer,
-  continueAfterTrickOnce,
+  applyCommand,
   createRoom,
-  exchangeSelectedCards,
-  keepHand,
-  playNextDemoTrickCard,
-  playTrickCardOnce,
   randomRoomCode,
-  startRound,
   suitSymbol,
-  toggleCard,
   playedCardsForPlayer,
+  viewForPlayer,
 } from "./game";
 import { legalCards } from "./tricks";
 import type { PlayedCard } from "./tricks";
+import { supportAdvice } from "./support";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
 const BOT_PAUSE_MS = 290;
 const TRICK_REVIEW_MS = 1300;
-const DISCARD_FLIGHT_MS = 430;
 
 function cardOrigin(selector: string): CardFlight["from"] | null {
   const rect = document.querySelector(selector)?.getBoundingClientRect();
   return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
-}
-
-async function flyDiscard(card: Card, playerId: string, index: number, faceUp: boolean) {
-  const selector = faceUp
-    ? `.your-hand [data-card-id="${card.id}"]`
-    : `[data-player-id="${playerId}"] .opponent-cards [data-card-id="${card.id}"]`;
-  const source = document.querySelector<HTMLElement>(selector);
-  const pile = document.querySelector<HTMLElement>(".discard-pile-cards");
-  if (!source || !pile) return;
-  const from = source.getBoundingClientRect();
-  const to = pile.getBoundingClientRect();
-  const offset = pileOffset(index);
-  const flying = source.cloneNode(true) as HTMLElement;
-  flying.classList.remove("selected");
-  flying.classList.add("discard-flight");
-  Object.assign(flying.style, {
-    position: "fixed", left: `${from.left}px`, top: `${from.top}px`,
-    width: `${from.width}px`, height: `${from.height}px`,
-    margin: "0", transform: "none", transition: "none", zIndex: "1000",
-    pointerEvents: "none",
-  });
-  document.body.appendChild(flying);
-  source.style.visibility = "hidden";
-  const dx = to.left + to.width / 2 + offset.x - (from.left + from.width / 2);
-  const dy = to.top + to.height / 2 + offset.y - (from.top + from.height / 2);
-  const scale = 49 / from.width;
-  const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : DISCARD_FLIGHT_MS;
-  try {
-    await flying.animate([
-      { transform: "translate(0, 0) scale(1) rotate(0deg)" },
-      { transform: `translate(${dx}px, ${dy}px) scale(${scale}) rotate(${offset.angle}deg)` },
-    ], { duration, easing: "cubic-bezier(0.22, 0.72, 0.22, 1)", fill: "forwards" }).finished;
-  } finally {
-    flying.remove();
-  }
 }
 
 type EntryMode = "create" | "join" | null;
@@ -148,13 +107,15 @@ function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string 
 
 function Avatar({
   player,
+  viewerId,
   size = "normal",
 }: {
-  player: Player;
+  player: PlayerView;
+  viewerId: string;
   size?: "normal" | "small";
 }) {
   const colors = ["peach", "lavender", "mint", "sand"];
-  const index = player.isLocal
+  const index = player.id === viewerId
     ? 0
     : (Number(player.id.replace(/\D/g, "")) % 3) + 1;
   return (
@@ -348,16 +309,16 @@ function Entry({
   );
 }
 
-function Seat({ player, index }: { player?: Player; index: number }) {
+function Seat({ player, index, viewerId }: { player?: PlayerView; index: number; viewerId: string }) {
   return (
     <div className={`lobby-seat ${player ? "seat-filled" : ""}`}>
       <span className="seat-index">0{index + 1}</span>
       {player ? (
         <>
-          <Avatar player={player} />
+          <Avatar player={player} viewerId={viewerId} />
           <div className="seat-name">{player.name}</div>
           <div className="seat-detail">
-            {player.isLocal ? "Du" : "Demospelare"}
+            {player.id === viewerId ? "Du" : player.control === "bot" ? "Demospelare" : "Spelare"}
           </div>
         </>
       ) : (
@@ -373,11 +334,13 @@ function Seat({ player, index }: { player?: Player; index: number }) {
 
 function Lobby({
   game,
+  viewerId,
   onAddDemo,
   onStart,
   onLeave,
 }: {
-  game: GameState;
+  game: GameView;
+  viewerId: string;
   onAddDemo: () => void;
   onStart: () => void;
   onLeave: () => void;
@@ -418,7 +381,7 @@ function Lobby({
             </div>
             <div className="seats-grid">
               {Array.from({ length: 4 }, (_, index) => (
-                <Seat key={index} player={game.players[index]} index={index} />
+                <Seat key={index} player={game.players[index]} index={index} viewerId={viewerId} />
               ))}
             </div>
             <div className="lobby-panel-bottom">
@@ -428,7 +391,7 @@ function Lobby({
               <button
                 className="small-button"
                 onClick={onAddDemo}
-                disabled={game.players.length >= 4}
+                disabled={game.players.length >= 4 || game.ownerId !== viewerId}
               >
                 + Lägg till demospelare
               </button>
@@ -461,7 +424,7 @@ function Lobby({
             <button
               className="button button-primary start-button"
               onClick={onStart}
-              disabled={game.players.length < 2}
+              disabled={game.players.length < 2 || game.ownerId !== viewerId}
             >
               Till spelbordet <span>→</span>
             </button>
@@ -479,6 +442,7 @@ function Lobby({
 
 function Opponent({
   player,
+  viewerId,
   active,
   announcement,
   position,
@@ -488,7 +452,8 @@ function Opponent({
   flight,
   onCardLanded,
 }: {
-  player: Player;
+  player: PlayerView;
+  viewerId: string;
   active: boolean;
   announcement?: string;
   position: "top" | "left" | "right";
@@ -501,12 +466,12 @@ function Opponent({
   return (
     <div className={`opponent seat-${position} ${active ? "opponent-active" : ""}`} data-player-id={player.id}>
       <div className="opponent-cards">
-        {player.hand.map((card) => (
-          <CardBack key={card.id} cardId={card.id} small />
+        {Array.from({ length: player.handCount }, (_, index) => (
+          <CardBack key={index} small />
         ))}
       </div>
       <div className="opponent-label">
-        <Avatar player={player} size="small" />
+        <Avatar player={player} viewerId={viewerId} size="small" />
         <span>
           <strong>{player.name}</strong>
           <small>{active ? "Aktiv spelare" : "Vid bordet"}</small>
@@ -527,12 +492,12 @@ function pileOffset(index: number) {
   };
 }
 
-function DiscardPile({ cards }: { cards: Card[] }) {
-  return <div className="discard-pile" aria-label={`Kasthög med ${cards.length} bortbytta kort`}>
+function DiscardPile({ count }: { count: number }) {
+  return <div className="discard-pile" aria-label={`Kasthög med ${count} bortbytta kort`}>
     <div className="physical-pile discard-pile-cards">
-      {cards.map((card, index) => {
+      {Array.from({ length: count }, (_, index) => {
         const offset = pileOffset(index);
-        return <div className="physical-pile-card" data-discard-card-id={card.id} key={card.id}
+        return <div className="physical-pile-card" key={index}
           style={{ transform: `translate(${offset.x}px, ${offset.y}px) rotate(${offset.angle}deg)`, zIndex: index + 1 }}>
           <CardBack small />
         </div>;
@@ -541,11 +506,11 @@ function DiscardPile({ cards }: { cards: Card[] }) {
   </div>;
 }
 
-function DeckPile({ cards }: { cards: Card[] }) {
-  return <div className="physical-pile deck-pile" aria-label={`Kortlek med ${cards.length} kort`}>
-    {cards.map((card, index) => {
+function DeckPile({ count }: { count: number }) {
+  return <div className="physical-pile deck-pile" aria-label={`Kortlek med ${count} kort`}>
+    {Array.from({ length: count }, (_, index) => {
       const offset = pileOffset(index);
-      return <div className="physical-pile-card" data-deck-card-id={card.id} key={card.id}
+      return <div className="physical-pile-card" key={index}
         style={{ transform: `translate(${offset.x / 2}px, ${offset.y / 2}px) rotate(${offset.angle / 3}deg)`, zIndex: index + 1 }}>
         <CardBack small />
       </div>;
@@ -564,7 +529,7 @@ function playedOffset(index: number, cardId: string) {
 
 function PlayedStack({ cards, player, currentCardIds, flight, onCardLanded }: {
   cards: Card[];
-  player: Player;
+  player: PlayerView;
   currentCardIds: Set<string>;
   flight: CardFlight | null;
   onCardLanded: () => void;
@@ -622,7 +587,7 @@ function cardLanding(cardId: string) {
   };
 }
 
-function ScorePanel({ players }: { players: Player[] }) {
+function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: string }) {
   return (
     <aside className="score-panel">
       <div className="score-header">
@@ -633,10 +598,10 @@ function ScorePanel({ players }: { players: Player[] }) {
         {players.map((player, index) => (
           <div className="score-row" key={player.id}>
             <span className="score-place">0{index + 1}</span>
-            <Avatar player={player} size="small" />
+            <Avatar player={player} viewerId={viewerId} size="small" />
             <span className="score-name">
               {player.name}
-              {player.isLocal && <small>DU</small>}
+              {player.id === viewerId && <small>DU</small>}
             </span>
             <strong>{player.score}</strong>
           </div>
@@ -651,6 +616,8 @@ function ScorePanel({ players }: { players: Player[] }) {
 
 function Table({
   game,
+  viewerId,
+  selectedCardIds,
   onToggle,
   onExchange,
   onKeep,
@@ -664,12 +631,14 @@ function Table({
   onLobby,
   onLeave,
 }: {
-  game: GameState;
+  game: GameView;
+  viewerId: string;
+  selectedCardIds: string[];
   onToggle: (id: string) => void;
   onExchange: () => void;
   onKeep: () => void;
   exchangeBusy: boolean;
-  visibleDiscard: Card[];
+  visibleDiscard: number;
   onPlayTrickCard: (id: string, from?: CardFlight["from"]) => void;
   flight: CardFlight | null;
   reviewedTrickCount: number;
@@ -678,8 +647,10 @@ function Table({
   onLobby: () => void;
   onLeave: () => void;
 }) {
-  const local = game.players.find((player) => player.isLocal)!;
-  const opponents = game.players.filter((player) => !player.isLocal);
+  const local = game.players.find((player) => player.id === viewerId)!;
+  const [supportOpen, setSupportOpen] = useState(false);
+  const advice = supportOpen ? supportAdvice(game, viewerId) : null;
+  const opponents = game.players.filter((player) => player.id !== viewerId);
   const exchanging = game.tableStage === "exchange";
   const playingTricks = game.tableStage === "tricks";
   const reviewingTrick = playingTricks && game.waitingForNextTrick;
@@ -693,7 +664,7 @@ function Table({
   const pendingTrick = game.completedTricks.length > reviewedTrickCount;
   const currentCardIds = new Set((game.currentTrick.length
     ? game.currentTrick : pendingTrick ? lastTrick?.cards ?? [] : []).map((played) => played.card.id));
-  const selectionCount = game.selectedCardIds.length;
+  const selectionCount = selectedCardIds.length;
   const currentEvaluation = exchanging ? evaluateHand(local.hand) : null;
   const finalAward = game.handAwards.find((award) => award.exchangeCount === 3);
   const finalTrickWinner = game.players.find((player) => player.id === game.finalTrickAward?.winnerId);
@@ -784,6 +755,7 @@ function Table({
                 <Opponent
                   key={player.id}
                   player={player}
+                  viewerId={viewerId}
                   active={game.activePlayerId === player.id}
                   position={opponents.length === 1 ? "top" : opponents.length === 2
                     ? index === 0 ? "left" : "right"
@@ -801,14 +773,14 @@ function Table({
             <div className={`table-center ${exchanging ? "" : "table-center-tricks"}`}>
               {exchanging ? <><div className="table-stacks">
                 <div className="stack-group">
-                  <DeckPile cards={game.deck} />
+                  <DeckPile count={game.deckCount} />
                 </div>
                 <div className="stack-group">
-                  <DiscardPile cards={visibleDiscard} />
+                  <DiscardPile count={visibleDiscard} />
                 </div>
               </div>
               </> : <div className="trick-view" aria-live="polite">
-                <div className="trick-discard"><DiscardPile cards={game.discard} /></div>
+                <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
                   <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
                 {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
@@ -838,7 +810,7 @@ function Table({
             <div className="your-area">
               {exchanging && <div className="hand-combination" aria-live="polite">{currentEvaluation?.label}</div>}
               {!exchanging && <div className="your-label">
-                <Avatar player={local} size="small" />
+                <Avatar player={local} viewerId={viewerId} size="small" />
                 <span>
                   <strong>
                     {local.name} <em>DU</em>
@@ -859,7 +831,7 @@ function Table({
                   <PlayingCard
                     key={card.id}
                     card={card}
-                    selected={exchanging && game.selectedCardIds.includes(card.id)}
+                    selected={exchanging && selectedCardIds.includes(card.id)}
                     unavailable={playingTricks && (!humanTurn || !legalTrickIds.has(card.id))}
                     onClick={
                       game.tableStage === "result" || exchangeBusy || (playingTricks && !humanTurn) ? undefined
@@ -903,7 +875,18 @@ function Table({
             </h1>
             <p>Fem kort på hand. Resten bestämmer ni tillsammans.</p>
           </div>
-          <ScorePanel players={game.players} />
+          <button type="button" className="support-toggle" aria-expanded={supportOpen}
+            aria-controls="support-sheet" onClick={() => setSupportOpen((open) => !open)}>
+            <span>Tips &amp; hjälp</span><span>{supportOpen ? "Dölj −" : "Visa +"}</span>
+          </button>
+          {supportOpen && advice && <section id="support-sheet" className="support-sheet" aria-label="Tips och hjälp" aria-live="polite">
+            <p>{advice.context}</p>
+            {advice.tips.map((tip, index) => <div className="support-tip" key={index}>
+              <span>{game.tableStage === "exchange" ? (index === 0 ? "BEHÅLL GÄRNA" : "ÖVERVÄG ATT BYTA") : (index === 0 ? "FÖRSLAG" : "ALTERNATIV")}</span>
+              <p>{tip.text}</p>
+            </div>)}
+          </section>}
+          <ScorePanel players={game.players} viewerId={viewerId} />
           {game.tableStage !== "exchange" && <div className="trick-tally">
             <span>VUNNA STICK</span>
             {game.players.map((player) => <div key={player.id}>
@@ -942,49 +925,31 @@ function Table({
 }
 
 export default function App() {
+  // The preview owns authority locally. Table and Lobby receive only a viewer projection.
   const [mode, setMode] = useState<EntryMode>(null);
   const [game, setGame] = useState<GameState | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [flight, setFlight] = useState<CardFlight | null>(null);
   const [reviewedTrickCount, setReviewedTrickCount] = useState(0);
-  const [exchangeBusy, setExchangeBusy] = useState(false);
-  const [previewDiscard, setPreviewDiscard] = useState<Card[] | null>(null);
   const gameRef = useRef(game);
   const busyRef = useRef(false);
   gameRef.current = game;
+  const view = game && viewerId ? viewForPlayer(game, viewerId) : null;
 
-  async function finishHumanExchange() {
+  function finishHumanExchange() {
     const current = gameRef.current;
-    if (!current || busyRef.current || current.tableStage !== "exchange") return;
-    const next = current.selectedCardIds.length ? exchangeSelectedCards(current) : keepHand(current);
+    if (!current || !viewerId || busyRef.current) return;
+    const next = applyCommand(current, { type: "exchange", actorId: viewerId, discardIds: selectedCardIds });
     if (next === current) return;
-    busyRef.current = true;
-    setExchangeBusy(true);
-    const settled = [...current.discard];
-    setPreviewDiscard(settled);
-    try {
-      for (const player of current.players) {
-        const nextHand = new Set(next.players.find((candidate) => candidate.id === player.id)?.hand.map((card) => card.id));
-        const thrown = player.hand.filter((card) => !nextHand.has(card.id));
-        if (!thrown.length) continue;
-        await Promise.all(thrown.map((card, index) =>
-          flyDiscard(card, player.id, settled.length + index, player.isLocal)));
-        settled.push(...thrown);
-        setPreviewDiscard([...settled]);
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      }
-    } finally {
-      gameRef.current = next;
-      setGame(next);
-      setPreviewDiscard(null);
-      setExchangeBusy(false);
-      busyRef.current = false;
-      document.querySelectorAll<HTMLElement>("[data-card-id]").forEach((node) => { node.style.visibility = ""; });
-    }
+    gameRef.current = next;
+    setGame(next);
+    setSelectedCardIds([]);
   }
 
   function playOneCard(next: GameState, from: CardFlight["from"] | null) {
     const previous = gameRef.current;
-    if (!previous) return;
+    if (!previous || next === previous) return;
     const played = next.currentTrick.length > previous.currentTrick.length
       ? next.currentTrick.at(-1)
       : next.completedTricks.length > previous.completedTricks.length
@@ -1002,108 +967,83 @@ export default function App() {
 
   function playHumanCard(cardId: string, from?: CardFlight["from"]) {
     const current = gameRef.current;
-    if (!current || busyRef.current || current.tableStage !== "tricks" || current.activePlayerId !== current.players.find((player) => player.isLocal)?.id) return;
+    if (!current || !viewerId || busyRef.current) return;
     const origin = from ?? cardOrigin(`.your-hand [data-card-id="${cardId}"]`);
-    playOneCard(playTrickCardOnce(current, cardId), origin);
+    playOneCard(applyCommand(current, { type: "play-card", actorId: viewerId, cardId }), origin);
   }
 
   useEffect(() => {
-    if (!game || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
+    if (!game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
     const active = game.players.find((player) => player.id === game.activePlayerId);
-    if (!active || active.isLocal) return;
+    if (!active || active.control !== "bot") return;
     const timer = window.setTimeout(() => {
       const current = gameRef.current;
       if (!current || busyRef.current || current.activePlayerId !== active.id || current.waitingForNextTrick) return;
       const origin = cardOrigin(`[data-player-id="${active.id}"] .opponent-cards .card-back:last-child`);
-      playOneCard(playNextDemoTrickCard(current), origin);
+      playOneCard(applyCommand(current, { type: "advance-bot", actorId: current.ownerId }), origin);
     }, BOT_PAUSE_MS);
     return () => window.clearTimeout(timer);
-  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight]);
+  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId]);
 
   useEffect(() => {
     if (game?.phase !== "table" || !game.completedTricks.length ||
       game.completedTricks.length <= reviewedTrickCount || flight) return;
     const timer = window.setTimeout(() => {
       setReviewedTrickCount(game.completedTricks.length);
-      setGame((current) => current?.waitingForNextTrick ? continueAfterTrickOnce(current) : current);
+      setGame((current) => current?.waitingForNextTrick
+        ? applyCommand(current, { type: "continue-trick", actorId: current.ownerId }) : current);
     }, TRICK_REVIEW_MS);
     return () => window.clearTimeout(timer);
   }, [game?.phase, game?.completedTricks.length, reviewedTrickCount, flight]);
 
   function enterRoom(name: string, entry: RoomEntry) {
-    // An unknown code opens a local demo room until multiplayer rooms exist.
+    // Joining still opens a local practice room until transport exists.
     busyRef.current = false;
     setFlight(null);
     setReviewedTrickCount(0);
-    const room = createRoom(
-      name,
-      entry.kind === "join" ? entry.code : randomRoomCode(),
-    );
-    setGame(entry.kind === "join" ? addDemoPlayer(room) : room);
+    setSelectedCardIds([]);
+    const room = createRoom(name, entry.kind === "join" ? entry.code : randomRoomCode());
+    setViewerId(room.ownerId);
+    setGame(entry.kind === "join" ? applyCommand(room, { type: "add-bot", actorId: room.ownerId }) : room);
   }
 
-  if (!game)
+  if (!view || !viewerId)
     return mode ? (
-      <Entry
-        key={mode}
-        mode={mode}
-        onBack={() => setMode(null)}
-        onSubmit={enterRoom}
-      />
-    ) : (
-      <Landing onEnter={setMode} />
-    );
-  if (game.phase === "lobby")
-    return (
-      <Lobby
-        game={game}
-        onAddDemo={() =>
-          setGame((current) => current && addDemoPlayer(current))
-        }
-        onStart={() => {
-          setReviewedTrickCount(0);
-          setGame((current) => current && startRound(current));
-        }}
-        onLeave={() => {
-          setGame(null);
-          setMode(null);
-        }}
-      />
-    );
-  return (
-    <Table
-      game={game}
-      onToggle={(id) =>
-        setGame((current) => current && toggleCard(current, id))
-      }
-      onExchange={finishHumanExchange}
-      onKeep={finishHumanExchange}
-      exchangeBusy={exchangeBusy}
-      visibleDiscard={previewDiscard ?? game.discard}
-      onPlayTrickCard={playHumanCard}
-      flight={flight}
-      reviewedTrickCount={reviewedTrickCount}
-      onCardLanded={() => {
-        busyRef.current = false;
-        setFlight(null);
-      }}
-      onNextRound={() => {
-        busyRef.current = false;
-        setFlight(null);
+      <Entry key={mode} mode={mode} onBack={() => setMode(null)} onSubmit={enterRoom} />
+    ) : <Landing onEnter={setMode} />;
+  if (view.phase === "lobby")
+    return <Lobby game={view} viewerId={viewerId}
+      onAddDemo={() => setGame((current) => current && applyCommand(current, { type: "add-bot", actorId: viewerId }))}
+      onStart={() => {
         setReviewedTrickCount(0);
-        setGame((current) => current?.tableStage === "result" ? startRound(current) : current);
+        setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
       }}
-      onLobby={() => {
-        busyRef.current = false;
-        setFlight(null);
-        setGame((current) => current && { ...current, phase: "lobby", selectedCardIds: [] });
-      }}
-      onLeave={() => {
-        busyRef.current = false;
-        setFlight(null);
-        setGame(null);
-        setMode(null);
-      }}
-    />
-  );
+      onLeave={() => { setGame(null); setViewerId(null); setMode(null); }} />;
+  return <Table
+    game={view}
+    viewerId={viewerId}
+    selectedCardIds={selectedCardIds}
+    onToggle={(id) => {
+      if (view.exchangeSubmittedPlayerIds.includes(viewerId)) return;
+      setSelectedCardIds((current) => current.includes(id)
+        ? current.filter((cardId) => cardId !== id) : [...current, id]);
+    }}
+    onExchange={finishHumanExchange}
+    onKeep={finishHumanExchange}
+    exchangeBusy={view.exchangeSubmittedPlayerIds.includes(viewerId)}
+    visibleDiscard={view.discardCount}
+    onPlayTrickCard={playHumanCard}
+    flight={flight}
+    reviewedTrickCount={reviewedTrickCount}
+    onCardLanded={() => { busyRef.current = false; setFlight(null); }}
+    onNextRound={() => {
+      busyRef.current = false; setFlight(null); setReviewedTrickCount(0); setSelectedCardIds([]);
+      setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
+    }}
+    onLobby={() => {
+      busyRef.current = false; setFlight(null); setSelectedCardIds([]);
+      setGame((current) => current && applyCommand(current, { type: "return-lobby", actorId: viewerId }));
+    }}
+    onLeave={() => { busyRef.current = false; setFlight(null); setGame(null); setViewerId(null); setMode(null); }}
+  />;
 }

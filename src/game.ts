@@ -27,7 +27,7 @@ export type Card = { id: string; suit: Suit; rank: Rank };
 export type Player = {
   id: string;
   name: string;
-  isLocal: boolean;
+  control: "human" | "bot";
   score: number;
   hand: Card[];
 };
@@ -45,6 +45,7 @@ export type TrickAward = { winnerId: string; points: number };
 export type ExchangeFeedback = { exchangeCount: 1 | 2 | 3; changedCards: number };
 export type GameState = {
   roomCode: string;
+  ownerId: string;
   phase: Phase;
   tableStage: TableStage;
   players: Player[];
@@ -53,6 +54,7 @@ export type GameState = {
   activePlayerId: string | null;
   selectedCardIds: string[];
   exchangeCount: ExchangeCount;
+  exchangeSubmittedPlayerIds: string[];
   exchangeFeedback: ExchangeFeedback | null;
   handAwards: HandAward[];
   finalHands: Record<string, Card[]> | null;
@@ -64,7 +66,7 @@ export type GameState = {
   trickError: string | null;
 };
 
-export function playedCardsForPlayer(game: GameState, playerId: string): Card[] {
+export function playedCardsForPlayer(game: Pick<GameState, "completedTricks" | "currentTrick">, playerId: string): Card[] {
   return [
     ...game.completedTricks.flatMap((trick) =>
       trick.cards.filter((played) => played.playerId === playerId).map((played) => played.card),
@@ -102,16 +104,18 @@ export function finalTrickPoints(): number {
 export function createRoom(
   name: string,
   roomCode: string,
+  playerId: string = crypto.randomUUID(),
 ): GameState {
   const local: Player = {
-    id: "local",
+    id: playerId,
     name: name.trim(),
-    isLocal: true,
+    control: "human",
     score: 0,
     hand: [],
   };
   return {
     roomCode,
+    ownerId: playerId,
     phase: "lobby",
     tableStage: "exchange",
     players: [local],
@@ -120,6 +124,7 @@ export function createRoom(
     activePlayerId: null,
     selectedCardIds: [],
     exchangeCount: 0,
+    exchangeSubmittedPlayerIds: [],
     exchangeFeedback: null,
     handAwards: [],
     finalHands: null,
@@ -133,7 +138,9 @@ export function createRoom(
 }
 
 export function addDemoPlayer(game: GameState): GameState {
-  if (game.players.length >= 4) return game;
+  if (game.phase !== "lobby" || game.players.length >= 4) return game;
+  let botNumber = 1;
+  while (game.players.some((player) => player.id === `demo-${botNumber}`)) botNumber++;
   const names = ["Alex", "Sam", "Kim"];
   const used = new Set(game.players.map((player) => player.name.toLowerCase()));
   const name =
@@ -144,9 +151,9 @@ export function addDemoPlayer(game: GameState): GameState {
     players: [
       ...game.players,
       {
-        id: `demo-${game.players.length}`,
+        id: `demo-${botNumber}`,
         name,
-        isLocal: false,
+        control: "bot",
         score: 0,
         hand: [],
       },
@@ -155,7 +162,7 @@ export function addDemoPlayer(game: GameState): GameState {
 }
 
 export function startRound(game: GameState): GameState {
-  if (game.players.length < 2) return game;
+  if (game.players.length < 2 || (game.phase !== "lobby" && game.tableStage !== "result")) return game;
   const deck = shuffled(createDeck());
   const players = game.players.map((player) => ({
     ...player,
@@ -171,6 +178,7 @@ export function startRound(game: GameState): GameState {
     activePlayerId: players[0].id,
     selectedCardIds: [],
     exchangeCount: 0,
+    exchangeSubmittedPlayerIds: [],
     exchangeFeedback: null,
     handAwards: [],
     finalHands: null,
@@ -185,7 +193,7 @@ export function startRound(game: GameState): GameState {
 
 export function toggleCard(game: GameState, cardId: string): GameState {
   if (game.phase !== "table" || game.tableStage !== "exchange") return game;
-  const localHand = game.players.find((player) => player.isLocal)?.hand ?? [];
+  const localHand = game.players.find((player) => player.id === game.ownerId)?.hand ?? [];
   if (!localHand.some((card) => card.id === cardId)) return game;
   const selected = game.selectedCardIds.includes(cardId)
     ? game.selectedCardIds.filter((id) => id !== cardId)
@@ -240,7 +248,7 @@ function canFinishExchange(game: GameState): boolean {
     game.phase === "table" &&
     game.tableStage === "exchange" &&
     game.exchangeCount < 3 &&
-    game.players.find((player) => player.isLocal)?.hand.length === 5 &&
+    game.players.find((player) => player.id === game.ownerId)?.hand.length === 5 &&
     validCardZones(game)
   );
 }
@@ -286,7 +294,7 @@ function exchangePlayerCards(
 
 function finishExchange(game: GameState): GameState {
   let next = game;
-  for (const player of game.players.filter((candidate) => !candidate.isLocal)) {
+  for (const player of game.players.filter((candidate) => candidate.control === "bot")) {
     const discardedIds = chooseBotDiscards(next.players.find((p) => p.id === player.id)!.hand);
     const exchanged = exchangePlayerCards(next, player.id, discardedIds);
     if (exchanged === next) return game;
@@ -302,7 +310,7 @@ function finishExchange(game: GameState): GameState {
   }
   const exchanged: GameState = {
     ...next,
-    activePlayerId: next.players.find((player) => player.isLocal)?.id ?? null,
+    activePlayerId: next.ownerId,
     selectedCardIds: [],
     exchangeCount: nextExchangeCount(game.exchangeCount),
   };
@@ -324,7 +332,7 @@ function finishExchange(game: GameState): GameState {
 export function exchangeSelectedCards(game: GameState): GameState {
   if (!canFinishExchange(game) || game.selectedCardIds.length === 0)
     return game;
-  const local = game.players.find((player) => player.isLocal);
+  const local = game.players.find((player) => player.id === game.ownerId);
   if (!local) return game;
   const exchanged = exchangePlayerCards(game, local.id, game.selectedCardIds);
   if (exchanged === game) return game;
@@ -337,7 +345,7 @@ export function exchangeSelectedCards(game: GameState): GameState {
 
 export function keepHand(game: GameState): GameState {
   if (!canFinishExchange(game) || game.selectedCardIds.length > 0) return game;
-  const local = game.players.find((player) => player.isLocal);
+  const local = game.players.find((player) => player.id === game.ownerId);
   return finishExchange({
     ...game,
     exchangeFeedback: { exchangeCount: nextExchangeCount(game.exchangeCount), changedCards: 0 },
@@ -348,9 +356,9 @@ export function keepHand(game: GameState): GameState {
 export function selectTrickCard(game: GameState, cardId: string): GameState {
   if (
     game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick ||
-    !game.players.find((player) => player.isLocal && player.id === game.activePlayerId)
+    game.ownerId !== game.activePlayerId
   ) return game;
-  const hand = game.players.find((player) => player.isLocal)!.hand;
+  const hand = game.players.find((player) => player.id === game.ownerId)!.hand;
   const card = hand.find((candidate) => candidate.id === cardId);
   if (!card) return game;
   if (game.selectedCardIds[0] === cardId)
@@ -442,14 +450,14 @@ function runDemoTurns(game: GameState): GameState {
 export function playNextDemoTrickCard(game: GameState): GameState {
   if (game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick) return game;
   const player = game.players.find((candidate) => candidate.id === game.activePlayerId);
-  if (!player || player.isLocal) return game;
+  if (!player || player.control !== "bot") return game;
   const card = chooseBotTrickCard(player.hand, game.currentTrick[0]?.card.suit ?? null);
   return playCard(game, player.id, card.id);
 }
 
 export function playSelectedTrickCardOnce(game: GameState): GameState {
   if (game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick) return game;
-  const local = game.players.find((player) => player.isLocal);
+  const local = game.players.find((player) => player.id === game.ownerId);
   if (!local || game.activePlayerId !== local.id) return game;
   const cardId = game.selectedCardIds[0];
   if (!cardId) return { ...game, trickError: "Välj ett kort att spela." };
@@ -463,7 +471,7 @@ export function playSelectedTrickCardOnce(game: GameState): GameState {
 
 export function playTrickCardOnce(game: GameState, cardId: string): GameState {
   if (game.phase !== "table" || game.tableStage !== "tricks") return game;
-  const local = game.players.find((player) => player.isLocal);
+  const local = game.players.find((player) => player.id === game.ownerId);
   return local ? playCard(game, local.id, cardId) : game;
 }
 
@@ -487,4 +495,102 @@ export function randomRoomCode(): string {
     { length: 5 },
     () => alphabet[Math.floor(Math.random() * alphabet.length)],
   ).join("");
+}
+
+export type GameCommand =
+  | { type: "add-human"; actorId: string; playerId: string; name: string }
+  | { type: "add-bot"; actorId: string }
+  | { type: "remove-player"; actorId: string; playerId: string }
+  | { type: "start-round"; actorId: string }
+  | { type: "return-lobby"; actorId: string }
+  | { type: "exchange"; actorId: string; discardIds: string[] }
+  | { type: "play-card"; actorId: string; cardId: string }
+  | { type: "advance-bot"; actorId: string }
+  | { type: "continue-trick"; actorId: string };
+
+/** Returns the original state for a rejected command. Only the room owner drives shared timing. */
+export function applyCommand(game: GameState, command: GameCommand): GameState {
+  const actor = game.players.find((player) => player.id === command.actorId);
+  if (!actor || actor.control !== "human") return game;
+  switch (command.type) {
+    case "add-human":
+      if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= 4 ||
+        typeof command.playerId !== "string" || !command.playerId || typeof command.name !== "string" ||
+        !command.name.trim() || game.players.some((p) => p.id === command.playerId)) return game;
+      return { ...game, players: [...game.players, { id: command.playerId, name: command.name.trim(), control: "human", score: 0, hand: [] }] };
+    case "add-bot":
+      return command.actorId === game.ownerId ? addDemoPlayer(game) : game;
+    case "remove-player":
+      if (game.phase !== "lobby" || (command.actorId !== command.playerId && command.actorId !== game.ownerId)) return game;
+      const players = game.players.filter((p) => p.id !== command.playerId);
+      if (players.length === game.players.length) return game;
+      if (command.playerId === game.ownerId && !players.some((p) => p.control === "human"))
+        return { ...game, players: [], ownerId: "" };
+      return { ...game, players, ownerId: command.playerId === game.ownerId
+        ? players.find((p) => p.control === "human")!.id : game.ownerId };
+    case "start-round":
+      return command.actorId === game.ownerId ? startRound(game) : game;
+    case "return-lobby":
+      return command.actorId === game.ownerId && game.phase === "table"
+        ? { ...game, phase: "lobby", selectedCardIds: [], exchangeSubmittedPlayerIds: [] } : game;
+    case "exchange": {
+      if (game.phase !== "table" || game.tableStage !== "exchange" || game.exchangeCount >= 3 ||
+        !Array.isArray(command.discardIds) || command.discardIds.length > 5 ||
+        !command.discardIds.every((id) => typeof id === "string") ||
+        game.exchangeSubmittedPlayerIds.includes(actor.id) || actor.hand.length !== 5 || !validCardZones(game)) return game;
+      const exchanged = exchangePlayerCards(game, actor.id, command.discardIds);
+      if (exchanged === game) return game;
+      const submitted = [...game.exchangeSubmittedPlayerIds, actor.id];
+      let next: GameState = { ...exchanged, exchangeSubmittedPlayerIds: submitted,
+        activity: [...exchanged.activity, command.discardIds.length
+          ? `${actor.name} byter ${command.discardIds.length} kort` : `${actor.name} behåller handen`] };
+      if (game.players.some((p) => p.control === "human" && !submitted.includes(p.id))) return next;
+      for (const bot of game.players.filter((p) => p.control === "bot")) {
+        const botHand = next.players.find((p) => p.id === bot.id)!.hand;
+        next = exchangePlayerCards(next, bot.id, chooseBotDiscards(botHand));
+      }
+      next = { ...next, exchangeSubmittedPlayerIds: [], exchangeCount: nextExchangeCount(game.exchangeCount), selectedCardIds: [] };
+      if (next.exchangeCount === 1 || next.exchangeCount === 2) return scorePokerHands(next, next.exchangeCount,
+        Object.fromEntries(next.players.map((p) => [p.id, p.hand])));
+      return { ...next, finalHands: Object.fromEntries(next.players.map((p) => [p.id, [...p.hand]])),
+        tableStage: "tricks", activePlayerId: next.players[0].id,
+        activity: [...next.activity, "Kortbytet är klart · stickspel börjar"] };
+    }
+    case "play-card":
+      return actor.id === game.activePlayerId && game.phase === "table" ? playCard(game, actor.id, command.cardId) : game;
+    case "advance-bot":
+      return command.actorId === game.ownerId ? playNextDemoTrickCard(game) : game;
+    case "continue-trick":
+      return command.actorId === game.ownerId ? continueAfterTrickOnce(game) : game;
+  }
+}
+
+export type PlayerView = Omit<Player, "hand"> & { hand: Card[]; handCount: number };
+export type GameView = Omit<GameState, "deck" | "discard" | "players" | "finalHands" | "selectedCardIds" | "trickError" | "exchangeFeedback"> & {
+  players: PlayerView[];
+  deckCount: number;
+  discardCount: number;
+  selectedCardIds: string[];
+  trickError: string | null;
+  exchangeFeedback: ExchangeFeedback | null;
+};
+
+/** Construct explicitly so new authority fields cannot silently enter client snapshots. */
+export function viewForPlayer(game: GameState, viewerId: string): GameView | null {
+  if (!game.players.some((p) => p.id === viewerId)) return null;
+  const revealed = game.tableStage === "result";
+  return {
+    roomCode: game.roomCode, ownerId: game.ownerId, phase: game.phase, tableStage: game.tableStage,
+    players: game.players.map((p) => ({ id: p.id, name: p.name, control: p.control, score: p.score,
+      hand: p.id === viewerId ? [...p.hand] : [], handCount: p.hand.length })),
+    deckCount: game.deck.length, discardCount: game.discard.length,
+    activePlayerId: game.activePlayerId, selectedCardIds: [], exchangeCount: game.exchangeCount,
+    exchangeSubmittedPlayerIds: [...game.exchangeSubmittedPlayerIds], exchangeFeedback: null,
+    handAwards: game.handAwards.map((award) => ({ ...award, evaluations: revealed ? award.evaluations : {} })),
+    finalTrickAward: game.finalTrickAward, activity: [...game.activity],
+    currentTrick: game.currentTrick.map((played) => ({ ...played })),
+    completedTricks: game.completedTricks.map((trick) => ({ winnerId: trick.winnerId,
+      cards: trick.cards.map((played) => ({ ...played })) })),
+    waitingForNextTrick: game.waitingForNextTrick, trickError: null,
+  };
 }

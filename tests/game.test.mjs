@@ -140,11 +140,11 @@ test("breaks same-category ties in normal poker order", () => {
 });
 
 function readyGame() {
-  const room = createRoom("Du", "ABCDE");
+  const room = createRoom("Du", "ABCDE", "local");
   room.players.push({
     id: "demo",
     name: "Alex",
-    isLocal: false,
+    control: "bot",
     score: 0,
     hand: [],
   });
@@ -162,12 +162,12 @@ function allCardIds(game) {
 }
 
 test("create, demo lobby, and table start remain available", () => {
-  const room = createRoom("Du", "ABCDE");
+  const room = createRoom("Du", "ABCDE", "local");
   assert.equal(room.phase, "lobby");
   assert.equal(startRound(room), room);
   const lobby = addDemoPlayer(room);
   assert.equal(lobby.players.length, 2);
-  assert.equal(lobby.players[1].isLocal, false);
+  assert.equal(lobby.players[1].control, "bot");
   const table = startRound(lobby);
   assert.equal(table.phase, "table");
   assert.equal(table.exchangeCount, 0);
@@ -219,7 +219,7 @@ test("keeping all cards advances and exchange 3 enters trick play", () => {
 });
 
 function readyTricks(opponents = 1) {
-  let game = createRoom("Du", "ABCDE");
+  let game = createRoom("Du", "ABCDE", "local");
   for (let i = 0; i < opponents; i++) game = addDemoPlayer(game);
   game = startRound(game);
   for (let i = 0; i < 3; i++) game = keepHand(game);
@@ -336,7 +336,7 @@ for (const opponents of [1, 3]) {
     let game = readyTricks(opponents);
     while (game.tableStage === "tricks") {
       assert.equal(game.activePlayerId, "local");
-      const local = game.players.find((player) => player.isLocal);
+      const local = game.players.find((player) => player.id === game.ownerId);
       const card = legalCards(local.hand, game.currentTrick[0]?.card.suit ?? null)[0];
       const completedBefore = game.completedTricks.length;
       game = playSelectedTrickCard(selectTrickCard(game, card.id));
@@ -370,7 +370,7 @@ for (const opponents of [1, 3]) {
 test("each player's played-card pile retains all five cards in play order", () => {
   let game = readyTricks(3);
   for (let turn = 1; turn <= 5; turn++) {
-    const local = game.players.find((player) => player.isLocal);
+    const local = game.players.find((player) => player.id === game.ownerId);
     const legal = legalCards(local.hand, game.currentTrick[0]?.card.suit ?? null)[0];
     game = playSelectedTrickCard(selectTrickCard(game, legal.id));
     if (game.waitingForNextTrick) game = continueAfterTrick(game);
@@ -400,7 +400,7 @@ test("bot discard choices follow the existing evaluator", () => {
 });
 
 test("four players exchange directly and score only after exchanges 1 and 2", () => {
-  let game = createRoom("Du", "ABCDE");
+  let game = createRoom("Du", "ABCDE", "local");
   for (let i = 0; i < 3; i++) game = addDemoPlayer(game);
   game = startRound(game);
   assert.deepEqual(game.handAwards, []);
@@ -425,7 +425,7 @@ test("four players exchange directly and score only after exchanges 1 and 2", ()
 });
 
 test("shared discard pile can refill the deck without duplicating cards", () => {
-  let game = startRound(addDemoPlayer(createRoom("Du", "ABCDE")));
+  let game = startRound(addDemoPlayer(createRoom("Du", "ABCDE", "local")));
   game = { ...game, deck: game.deck.slice(0, 2), discard: game.deck.slice(2) };
   const initialIds = allCardIds(game);
   assert.equal(new Set(initialIds).size, 52);
@@ -449,7 +449,7 @@ test("exchange rejects impossible card zones and keep requires no selection", ()
 });
 
 function exchangeFixture(localHand, botHand, deckFront = []) {
-  let game = startRound(addDemoPlayer(createRoom("Du", "ABCDE")));
+  let game = startRound(addDemoPlayer(createRoom("Du", "ABCDE", "local")));
   const held = new Set([...localHand, ...botHand].map((card) => card.id));
   const rest = createDeck().filter((card) => !held.has(card.id));
   const frontIds = new Set(deckFront.map((card) => card.id));
@@ -457,7 +457,7 @@ function exchangeFixture(localHand, botHand, deckFront = []) {
     ...game,
     players: game.players.map((player) => ({
       ...player,
-      hand: player.isLocal ? localHand : botHand,
+      hand: player.id === game.ownerId ? localHand : botHand,
     })),
     deck: [...deckFront, ...rest.filter((card) => !frontIds.has(card.id))],
   };
