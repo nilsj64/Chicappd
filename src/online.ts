@@ -6,12 +6,15 @@ type Reply = { view?: GameView; token?: string; playerId?: string; error?: strin
 const storageKey = "chicappd-online-session";
 
 function roomView(view: GameView | undefined): GameView {
+  console.log("ROOM VIEW RAW:", view);
+
   if (!view) {
-    throw new Error("Spelservern gav ett ofullständigt svar.");
+    throw new Error("Spelservern gav inget GameView.");
   }
 
   if (!view.settings) {
-    throw new Error("Spelservern gav ett ofullständigt svar.");
+    console.log("GAME VIEW UTAN SETTINGS:", view);
+    throw new Error("Spelservern gav GameView utan settings.");
   }
 
   return {
