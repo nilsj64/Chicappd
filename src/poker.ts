@@ -11,6 +11,15 @@ export type HandCategory =
   | "four-of-a-kind"
   | "straight-flush";
 
+export const handCategories: readonly HandCategory[] = [
+  "high-card", "one-pair", "two-pair", "three-of-a-kind", "straight",
+  "flush", "full-house", "four-of-a-kind", "straight-flush",
+];
+
+export function handCategoryPoints(category: HandCategory): number {
+  return handCategories.indexOf(category);
+}
+
 export type HandEvaluation = {
   category: HandCategory;
   /** Highest category wins; then compare these values from left to right. */
@@ -87,27 +96,27 @@ export function evaluateHand(cards: readonly Card[]): HandEvaluation {
         : 0);
 
   if (straightHigh && flush)
-    return result("straight-flush", 8, [straightHigh], "Färgstege");
+    return result("straight-flush", handCategoryPoints("straight-flush"), [straightHigh], "Färgstege");
   if (groups[0][1] === 4)
     return result(
       "four-of-a-kind",
-      7,
+      handCategoryPoints("four-of-a-kind"),
       [groups[0][0], groups[1][0]],
       `Fyrtal – ${rankPlural[groups[0][0]]}`,
     );
   if (groups[0][1] === 3 && groups[1][1] === 2)
     return result(
       "full-house",
-      6,
+      handCategoryPoints("full-house"),
       [groups[0][0], groups[1][0]],
       `Kåk – ${rankPlural[groups[0][0]]} över ${rankPlural[groups[1][0]]}`,
     );
-  if (flush) return result("flush", 5, values, "Färg");
-  if (straightHigh) return result("straight", 4, [straightHigh], "Stege");
+  if (flush) return result("flush", handCategoryPoints("flush"), values, "Färg");
+  if (straightHigh) return result("straight", handCategoryPoints("straight"), [straightHigh], "Stege");
   if (groups[0][1] === 3)
     return result(
       "three-of-a-kind",
-      3,
+      handCategoryPoints("three-of-a-kind"),
       [
         groups[0][0],
         ...groups
@@ -122,7 +131,7 @@ export function evaluateHand(cards: readonly Card[]): HandEvaluation {
     const lowPair = Math.min(groups[0][0], groups[1][0]);
     return result(
       "two-pair",
-      2,
+      handCategoryPoints("two-pair"),
       [highPair, lowPair, groups[2][0]],
       `Två par – ${rankPlural[highPair]} och ${rankPlural[lowPair]}`,
     );
@@ -130,7 +139,7 @@ export function evaluateHand(cards: readonly Card[]): HandEvaluation {
   if (groups[0][1] === 2)
     return result(
       "one-pair",
-      1,
+      handCategoryPoints("one-pair"),
       [
         groups[0][0],
         ...groups
@@ -140,7 +149,7 @@ export function evaluateHand(cards: readonly Card[]): HandEvaluation {
       ],
       `Ett par – ${rankPlural[groups[0][0]]}`,
     );
-  return result("high-card", 0, values, `Högt kort – ${rankPlural[values[0]]}`);
+  return result("high-card", handCategoryPoints("high-card"), values, `Högt kort – ${rankPlural[values[0]]}`);
 }
 
 /** Positive means first wins, negative means second wins, zero is a tie. */

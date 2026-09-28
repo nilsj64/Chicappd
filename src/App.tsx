@@ -15,6 +15,8 @@ import type { PlayedCard } from "./tricks";
 import { supportAdvice } from "./support";
 import { API_URL, commandOnline, enterOnline, loadOnline, savedSession, saveSession, watchOnline } from "./online";
 import type { OnlineSession } from "./online";
+import IRLTable from "./IRLTable";
+import Brand, { StarMark } from "./Brand";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
@@ -40,17 +42,6 @@ type RoomEntry =
 
 function FinalTrickRule({ points }: { points: 2 | 5 }) {
   return <span>Sista sticket: {points} p</span>;
-}
-
-function Brand({ light = false }: { light?: boolean }) {
-  return (
-    <div className={`brand ${light ? "brand-light" : ""}`}>
-      <span className="brand-mark">✳</span>
-      <span>
-        chicappd<span className="brand-dot">.</span>
-      </span>
-    </div>
-  );
 }
 
 function PlayingCard({
@@ -103,11 +94,7 @@ function PlayingCard({
 }
 
 function CardBackMark() {
-  return (
-    <svg className="card-back-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-      <path d="M50 9v82M9 50h82M21 21l58 58M79 21 21 79" />
-    </svg>
-  );
+  return <StarMark className="card-back-mark" />;
 }
 
 function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string }) {
@@ -142,7 +129,7 @@ function Avatar({
   );
 }
 
-function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
+function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; onPhysical: () => void }) {
   return (
     <div className="landing-page">
       <header className="landing-header page-width">
@@ -183,6 +170,7 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
             <span className="footnote-icon">✦</span> Onlinerum för två spelare
           </div>
           <button className="text-button" onClick={() => onEnter("practice")}>Spela lokalt mot datorn →</button>
+          <button className="text-button" onClick={onPhysical}>Spela med fysiska kort →</button>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="art-ring art-ring-one" />
@@ -979,6 +967,7 @@ function Table({
 }
 
 export default function App() {
+  const [physicalOpen, setPhysicalOpen] = useState(false);
   const [mode, setMode] = useState<EntryMode>(null);
   const [game, setGame] = useState<GameState | null>(null);
   const [remoteView, setRemoteView] = useState<GameView | null>(null);
@@ -1134,6 +1123,7 @@ export default function App() {
     setViewerId(null);
     setMode(null);
   }
+  if (physicalOpen) return <IRLTable onExit={() => setPhysicalOpen(false)} />;
   if (onlineSession && !view) return <div className="entry-page"><div className="page-width entry-layout"><div>
     <Brand /><h1>Återansluter till rummet…</h1>
     {error && <p role="alert">{error}</p>}
@@ -1142,7 +1132,7 @@ export default function App() {
   if (!view || !viewerId)
     return mode ? (
       <Entry key={mode} mode={mode} onBack={() => setMode(null)} onSubmit={enterRoom} error={error} busy={busy} />
-    ) : <Landing onEnter={setMode} />;
+    ) : <Landing onEnter={setMode} onPhysical={() => setPhysicalOpen(true)} />;
   if (view.phase === "lobby")
     return <><Lobby game={view} viewerId={viewerId} online={online}
       onSettings={(settings) => {

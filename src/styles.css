@@ -62,9 +62,14 @@ p {
   border-radius: 50%;
   background: #1b4c3e;
   color: #efe6cb;
-  font-family: serif;
-  font-size: 25px;
   line-height: 1;
+}
+.brand-mark svg {
+  width: 23px;
+  height: 23px;
+  stroke: currentColor;
+  stroke-width: 8;
+  stroke-linecap: round;
 }
 .brand-dot {
   color: #e18d70;
@@ -1750,8 +1755,8 @@ input:focus-visible {
   .table-header .brand-mark {
     width: 28px;
     height: 28px;
-    font-size: 21px;
   }
+  .table-header .brand-mark svg { width: 19px; height: 19px; }
   .table-header-center {
     display: none;
   }
@@ -1987,4 +1992,61 @@ input:focus-visible {
   background: #423617;
   color: #fff3ce;
   text-align: center;
+}
+.irl-page { min-height: 100vh; background: #f7f5ef; color: #183e34; }
+.irl-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px max(24px, calc((100vw - 1200px) / 2)); background: #173b34; color: #f8f2e7; }
+.irl-header .brand { font-size: 27px; }
+.irl-header > span { font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+.irl-header button { border: 1px solid #a4bdad; border-radius: 8px; padding: 9px 14px; color: inherit; background: transparent; }
+.irl-mobile-score { display: none; }
+.irl-setup { width: min(100% - 36px, 720px); margin: 54px auto; }
+.irl-setup h1, .irl-round-heading h1 { font: 500 clamp(36px, 5vw, 58px)/1.08 Fraunces, serif; letter-spacing: -.04em; margin: 16px 0; }
+.irl-setup h1 em { color: #ca8669; }
+.irl-setup > p, .irl-round-heading p { color: #61766c; }
+.irl-layout { width: min(100% - 36px, 1200px); margin: 32px auto; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 26px; align-items: start; }
+.irl-round-heading > span { color: #a46d51; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
+.irl-card, .irl-scoreboard, .irl-tools, .irl-rules { padding: 26px; border: 1px solid #e2ded2; border-radius: 18px; background: #fffdf8; box-shadow: 0 10px 35px #183e3410; }
+.irl-card h2 { font: 500 26px Fraunces, serif; margin: 4px 0 16px; }
+.irl-card p { color: #61766c; line-height: 1.5; }
+.irl-name-list, .irl-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.irl-page label { display: grid; gap: 7px; font-size: 14px; font-weight: 700; }
+.irl-page input, .irl-page select { width: 100%; min-height: 48px; border: 1px solid #c9c8ba; border-radius: 10px; padding: 10px 12px; background: #fff; color: #183e34; font: inherit; }
+.irl-inline-actions { display: flex; gap: 10px; margin: 14px 0 26px; }
+.irl-inline-actions button, .irl-tools button, .irl-player-buttons button { min-height: 44px; padding: 9px 14px; border: 1px solid #9bb5a7; border-radius: 10px; background: #eaf1e9; color: #183e34; font-weight: 700; }
+.irl-primary { width: 100%; min-height: 56px; margin-top: 22px; font-size: 17px; }
+.irl-hand-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border: 1px solid #d9dece; border-radius: 12px; padding: 18px; margin: 16px 0; }
+.irl-hand-picker legend { font-weight: 800; padding: 0 6px; }
+.irl-field { margin: 18px 0; }
+.irl-player-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.irl-player-buttons button:disabled { opacity: .45; }
+.irl-player-buttons button.selected { background: #173b34; color: #fff; }
+.irl-chicago-choice, .irl-chicago-result { padding: 18px; margin-bottom: 20px; border-radius: 12px; background: #fbf1d8; }
+.irl-chicago-choice h2, .irl-chicago-result h3 { margin: 0 0 8px; }
+.irl-chicago-active { padding: 14px 18px; margin-bottom: 14px; border-radius: 12px; background: #173b34; color: #fff0c6; font-weight: 800; }
+.irl-side { display: grid; gap: 14px; position: sticky; top: 16px; }
+.irl-scoreboard > span, .irl-rules > strong { font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.irl-score-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid #e5e4d9; font-size: 17px; }
+.irl-score-row:last-child { border: 0; }
+.irl-score-row strong { font: 600 32px Fraunces, serif; }
+.irl-tools { display: grid; gap: 10px; }
+.irl-correction { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid #e5e4d9; }
+.irl-rules p { font-size: 13px; line-height: 1.55; margin: 12px 0 0; }
+.irl-result ul { padding-left: 20px; line-height: 1.9; }
+.irl-error { color: #a83b29 !important; font-weight: 700; }
+@media (max-width: 760px) {
+  .irl-header { position: sticky; top: 0; z-index: 20; flex-wrap: wrap; padding: 10px 18px; }
+  .irl-header > span { display: none; }
+  .irl-mobile-score { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 6px 14px; width: 100%; font-size: 12px; }
+  .irl-mobile-score strong { margin-left: 3px; font: 700 17px Fraunces, serif; }
+  .irl-layout { display: flex; flex-direction: column; }
+  .irl-main { width: 100%; order: 0; }
+  .irl-side { display: contents; }
+  .irl-scoreboard { order: -1; width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; padding: 16px; }
+  .irl-scoreboard > span { grid-column: 1 / -1; margin-bottom: 6px; }
+  .irl-score-row { display: flex; width: 100%; padding: 8px; font-size: 14px; }
+  .irl-score-row strong { font-size: 25px; }
+  .irl-tools { order: 1; width: 100%; }
+  .irl-rules { order: 2; width: 100%; }
+  .irl-name-list, .irl-settings, .irl-hand-picker { grid-template-columns: 1fr; }
+  .irl-card { padding: 18px; }
 }
