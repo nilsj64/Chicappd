@@ -1089,28 +1089,31 @@ export default function App() {
   }, [view?.phase, view?.completedTricks.length, reviewedTrickCount, flight, online]);
 
   async function enterRoom(name: string, entry: RoomEntry) {
-    busyRef.current = false;
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     setFlight(null);
     setReviewedTrickCount(0);
     setSelectedCardIds([]);
     setError(null);
-    if (!API_URL && entry.kind !== "practice") {
-      setError("Onlinespel är inte konfigurerat ännu. Välj lokal övning under tiden.");
-      return;
-    }
-    if (API_URL && entry.kind !== "practice") {
-      setBusy(true);
-      try {
+    try {
+      if (!API_URL && entry.kind !== "practice")
+        throw new Error("Onlinespel är inte konfigurerat ännu. Välj lokal övning under tiden.");
+      if (API_URL && entry.kind !== "practice") {
         const result = await enterOnline(name, entry.kind === "join" ? entry.code : undefined);
         setViewerId(result.session.playerId);
         setRemoteView(result.view);
         setOnlineSession(result.session);
-      } catch (cause) { setError((cause as Error).message); }
-      finally { setBusy(false); }
-    } else {
-      const room = createRoom(name, entry.kind === "join" ? entry.code : randomRoomCode());
-      setViewerId(room.ownerId);
-      setGame(entry.kind === "join" || entry.kind === "practice" ? applyCommand(room, { type: "add-bot", actorId: room.ownerId }) : room);
+      } else {
+        const room = createRoom(name, entry.kind === "join" ? entry.code : randomRoomCode());
+        setViewerId(room.ownerId);
+        setGame(entry.kind === "join" || entry.kind === "practice" ? applyCommand(room, { type: "add-bot", actorId: room.ownerId }) : room);
+      }
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   }
   function leave() {
