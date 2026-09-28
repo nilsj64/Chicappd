@@ -37,13 +37,13 @@ export function supportAdvice(view: GameView, viewerId: string): SupportAdvice {
   }
 
   if (view.tableStage === "result") return {
-    context: `Rundan är slut. Bästa handen efter första och andra bytet och vid rundans slut gav poäng. Sista sticket gav ${finalTrickPoints()} poäng.`,
+    context: `Rundan är slut. Bästa handen efter första och andra bytet och vid rundans slut gav poäng. Sista sticket gav ${finalTrickPoints(view.settings)} poäng.`,
     tips: [],
   };
 
   const last = view.completedTricks.length === 4;
   const led = view.currentTrick[0]?.card.suit ?? null;
-  const context = `${last ? `Sista sticket ger ${finalTrickPoints()} poäng. ` : "De första fyra sticken ger inga poäng. "}${led ? `Du måste följa ${suitSymbol[led]} om du kan. Bara kort i den färgen kan vinna sticket.` : "Den som spelar ut bestämmer färg. Högsta kortet i den färgen vinner."}`;
+  const context = `${last ? `Sista sticket ger ${finalTrickPoints(view.settings)} poäng. ` : "De första fyra sticken ger inga poäng. "}${led ? `Du måste följa ${suitSymbol[led]} om du kan. Bara kort i den färgen kan vinna sticket.` : "Den som spelar ut bestämmer färg. Högsta kortet i den färgen vinner."}`;
   if (view.waitingForNextTrick || view.activePlayerId !== viewerId || !player.hand.length)
     return { context, tips: [{ cardIds: [], text: "Vänta på din tur. Den som vinner sticket spelar ut i nästa." }] };
 
@@ -66,7 +66,7 @@ export function supportAdvice(view: GameView, viewerId: string): SupportAdvice {
   const tips: SupportTip[] = [];
   const lastToPlay = view.currentTrick.length === view.players.length - 1;
   const winningText = cheapestWinner && `${cardsText([cheapestWinner])} är ditt lägsta kort som slår de spelade korten${lastToPlay
-    ? last ? ` och säkrar ${finalTrickPoints()} poäng.` : "; då får du leda nästa stick."
+    ? last ? ` och säkrar ${finalTrickPoints(view.settings)} poäng.` : "; då får du leda nästa stick."
     : "; spelare efter dig kan fortfarande slå det."}`;
   if (last && cheapestWinner)
     tips.push({ cardIds: [cheapestWinner.id], text: winningText! });

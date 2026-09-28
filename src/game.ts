@@ -42,6 +42,8 @@ export type HandAward = {
   points: number;
 };
 export type TrickAward = { winnerId: string; points: number };
+export type GameSettings = { finalTrickPoints: 2 | 5; allowNegativeScores: boolean };
+export type ChicagoAward = { playerId: string; points: 15 | -15 };
 export type ExchangeFeedback = { exchangeCount: 1 | 2 | 3; changedCards: number };
 export type GameState = {
   roomCode: string;
@@ -59,6 +61,10 @@ export type GameState = {
   handAwards: HandAward[];
   finalHands: Record<string, Card[]> | null;
   finalTrickAward: TrickAward | null;
+  settings: GameSettings;
+  chicagoPlayerId: string | null;
+  chicagoBreakerId: string | null;
+  chicagoAward: ChicagoAward | null;
   activity: string[];
   currentTrick: PlayedCard[];
   completedTricks: CompletedTrick[];
@@ -97,8 +103,15 @@ function shuffled(cards: Card[]): Card[] {
   return next;
 }
 
-export function finalTrickPoints(): number {
-  return 5;
+export function finalTrickPoints(settings?: GameSettings): 2 | 5 {
+  return settings?.finalTrickPoints ?? 5;
+}
+
+function addPoints(game: GameState, players: Player[], playerId: string, points: number): Player[] {
+  return players.map((player) => player.id === playerId ? {
+    ...player, score: game.settings?.allowNegativeScores
+      ? player.score + points : Math.max(0, player.score + points),
+  } : player);
 }
 
 export function createRoom(
@@ -129,6 +142,10 @@ export function createRoom(
     handAwards: [],
     finalHands: null,
     finalTrickAward: null,
+    settings: { finalTrickPoints: 5, allowNegativeScores: false },
+    chicagoPlayerId: null,
+    chicagoBreakerId: null,
+    chicagoAward: null,
     activity: [],
     currentTrick: [],
     completedTricks: [],
@@ -183,6 +200,9 @@ export function startRound(game: GameState): GameState {
     handAwards: [],
     finalHands: null,
     finalTrickAward: null,
+    chicagoPlayerId: null,
+    chicagoBreakerId: null,
+    chicagoAward: null,
     activity: [],
     currentTrick: [],
     completedTricks: [],
@@ -219,8 +239,7 @@ function scorePokerHands(
   const award: HandAward = { exchangeCount, evaluations, winnerId, points };
   return {
     ...game,
-    players: game.players.map((player) =>
-      player.id === winnerId ? { ...player, score: player.score + points } : player),
+    players: winnerId ? addPoints(game, game.players, winnerId, points) : game.players,
     handAwards: [...game.handAwards, award],
     activity: [...game.activity, winnerId
       ? `${best!.name} har bäst hand efter byte ${exchangeCount}: ${evaluations[winnerId].label} (+${points} p)`
@@ -404,12 +423,22 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
   const winnerId = trickWinner(cards);
   const completedTricks = [...game.completedTricks, { cards, winnerId }];
   const winnerName = players.find((candidate) => candidate.id === winnerId)!.name;
+  const firstBreak = game.chicagoPlayerId && winnerId !== game.chicagoPlayerId && !game.chicagoBreakerId;
+  const chicagoBreakerId = firstBreak ? winnerId : game.chicagoBreakerId;
+  const scoredPlayers = firstBreak ? addPoints(game, players, winnerId, 10) : players;
+  const breakActivity = firstBreak ? [`${winnerName} bröt Chicago (+10 p)`] : [];
   if (completedTricks.length === 5) {
-    const points = finalTrickPoints();
+    const points = finalTrickPoints(game.settings);
+    const chicagoAward: ChicagoAward | null = game.chicagoPlayerId
+      ? { playerId: game.chicagoPlayerId, points: chicagoBreakerId ? -15 : 15 } : null;
+    const withFinalTrick = addPoints(game, scoredPlayers, winnerId, points);
+    const withChicago = chicagoAward
+      ? addPoints(game, withFinalTrick, chicagoAward.playerId, chicagoAward.points) : withFinalTrick;
     const afterTrick: GameState = {
       ...game,
-      players: players.map((candidate) => candidate.id === winnerId
-        ? { ...candidate, score: candidate.score + points } : candidate),
+      players: withChicago,
+      chicagoBreakerId,
+      chicagoAward,
       currentTrick: [],
       completedTricks,
       activePlayerId: null,
@@ -417,7 +446,8 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
       selectedCardIds: [],
       trickError: null,
       finalTrickAward: { winnerId, points },
-      activity: [...activity, `${winnerName} vann sista sticket (+${points} p)`],
+      activity: [...activity, ...breakActivity, `${winnerName} vann sista sticket (+${points} p)`,
+        ...(chicagoAward ? [`${players.find((p) => p.id === chicagoAward.playerId)!.name} ${chicagoAward.points > 0 ? "vann" : "förlorade"} Chicago (${chicagoAward.points > 0 ? "+" : ""}${chicagoAward.points} p)`] : [])],
     };
     return afterTrick.finalHands
       ? scorePokerHands(afterTrick, 3, afterTrick.finalHands)
@@ -425,7 +455,8 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
   }
   return {
     ...game,
-    players,
+    players: scoredPlayers,
+    chicagoBreakerId,
     currentTrick: [],
     completedTricks,
     activePlayerId: winnerId,
@@ -433,7 +464,7 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
     waitingForNextTrick: true,
     selectedCardIds: [],
     trickError: null,
-    activity: [...activity, `${winnerName} vann stick ${completedTricks.length}`],
+    activity: [...activity, ...breakActivity, `${winnerName} vann stick ${completedTricks.length}`],
   };
 }
 
@@ -498,6 +529,8 @@ export function randomRoomCode(): string {
 }
 
 export type GameCommand =
+  | { type: "set-settings"; actorId: string; settings: GameSettings }
+  | { type: "declare-chicago"; actorId: string }
   | { type: "add-human"; actorId: string; playerId: string; name: string }
   | { type: "add-bot"; actorId: string }
   | { type: "remove-player"; actorId: string; playerId: string }
@@ -513,6 +546,19 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
   const actor = game.players.find((player) => player.id === command.actorId);
   if (!actor || actor.control !== "human") return game;
   switch (command.type) {
+    case "set-settings":
+      if (command.actorId !== game.ownerId || game.phase !== "lobby" ||
+        !command.settings || ![2, 5].includes(command.settings.finalTrickPoints) ||
+        typeof command.settings.allowNegativeScores !== "boolean") return game;
+      return { ...game, settings: { ...command.settings },
+        players: command.settings.allowNegativeScores ? game.players : game.players.map((player) => ({
+          ...player, score: Math.max(0, player.score),
+        })) };
+    case "declare-chicago":
+      if (game.phase !== "table" || game.tableStage !== "tricks" ||
+        game.currentTrick.length || game.completedTricks.length || game.chicagoPlayerId || actor.score < 15) return game;
+      return { ...game, chicagoPlayerId: actor.id,
+        activity: [...game.activity, `${actor.name} säger Chicago – måste vinna alla stick`] };
     case "add-human":
       if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= 4 ||
         typeof command.playerId !== "string" || !command.playerId || typeof command.name !== "string" ||
@@ -590,6 +636,10 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
     exchangeSubmittedPlayerIds: [...game.exchangeSubmittedPlayerIds], exchangeFeedback: null,
     handAwards: game.handAwards.map((award) => ({ ...award, evaluations: revealed ? award.evaluations : {} })),
     finalTrickAward: game.finalTrickAward, activity: [...game.activity],
+    settings: game.settings ?? { finalTrickPoints: 5, allowNegativeScores: false },
+    chicagoPlayerId: game.chicagoPlayerId ?? null,
+    chicagoBreakerId: game.chicagoBreakerId ?? null,
+    chicagoAward: game.chicagoAward ?? null,
     currentTrick: game.currentTrick.map((played) => ({ ...played })),
     completedTricks: game.completedTricks.map((trick) => ({ winnerId: trick.winnerId,
       cards: trick.cards.map((played) => ({ ...played })) })),

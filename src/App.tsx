@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { evaluateHand } from "./poker";
-import type { Card, GameState, GameView, PlayerView } from "./game";
+import type { Card, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
   createRoom,
@@ -38,8 +38,8 @@ type RoomEntry =
   | { kind: "join"; code: string }
   | { kind: "practice" };
 
-function FinalTrickRule() {
-  return <span>Sista sticket: 5 p</span>;
+function FinalTrickRule({ points }: { points: 2 | 5 }) {
+  return <span>Sista sticket: {points} p</span>;
 }
 
 function Brand({ light = false }: { light?: boolean }) {
@@ -357,6 +357,7 @@ function Lobby({
   game,
   viewerId,
   onAddDemo,
+  onSettings,
   onStart,
   onLeave, online,
 }: {
@@ -364,6 +365,7 @@ function Lobby({
   viewerId: string;
   online: boolean;
   onAddDemo: () => void;
+  onSettings: (settings: GameSettings) => void;
   onStart: () => void;
   onLeave: () => void;
 }) {
@@ -441,7 +443,18 @@ function Lobby({
             </p>
             <div className="room-rule">
               <span className="room-code-label">POÄNGREGEL</span>
-              <FinalTrickRule />
+              <label>Sista sticket
+                <select value={game.settings.finalTrickPoints} disabled={game.ownerId !== viewerId}
+                  onChange={(event) => onSettings({ ...game.settings, finalTrickPoints: Number(event.target.value) as 2 | 5 })}>
+                  <option value={5}>5 poäng</option><option value={2}>2 poäng</option>
+                </select>
+              </label>
+              <label>Minuspoäng
+                <select value={game.settings.allowNegativeScores ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+                  onChange={(event) => onSettings({ ...game.settings, allowNegativeScores: event.target.value === "yes" })}>
+                  <option value="no">Tillåt inte minuspoäng</option><option value="yes">Tillåt minuspoäng</option>
+                </select>
+              </label>
             </div>
             <button
               className="button button-primary start-button"
@@ -646,6 +659,7 @@ function Table({
   exchangeBusy,
   visibleDiscard,
   onPlayTrickCard,
+  onDeclareChicago,
   flight,
   reviewedTrickCount,
   onCardLanded,
@@ -663,6 +677,7 @@ function Table({
   exchangeBusy: boolean;
   visibleDiscard: number;
   onPlayTrickCard: (id: string, from?: CardFlight["from"]) => void;
+  onDeclareChicago: () => void;
   flight: CardFlight | null;
   reviewedTrickCount: number;
   onCardLanded: () => void;
@@ -691,6 +706,10 @@ function Table({
   const currentEvaluation = exchanging ? evaluateHand(local.hand) : null;
   const finalAward = game.handAwards.find((award) => award.exchangeCount === 3);
   const finalTrickWinner = game.players.find((player) => player.id === game.finalTrickAward?.winnerId);
+  const chicagoPlayer = game.players.find((player) => player.id === game.chicagoPlayerId);
+  const chicagoBreaker = game.players.find((player) => player.id === game.chicagoBreakerId);
+  const canDeclareChicago = playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
+    !game.chicagoPlayerId && local.score >= 15;
   const [showExchangeFeedback, setShowExchangeFeedback] = useState(false);
   const dragRef = useRef<{ id: string; pointerId: number; x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef<string | null>(null);
@@ -804,6 +823,10 @@ function Table({
               </div>
               </> : <div className="trick-view" aria-live="polite">
                 <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>
+                {chicagoPlayer && <div className="chicago-status" role="status">
+                  Chicago: <strong>{chicagoPlayer.name}</strong> satsar på alla stick
+                  {chicagoBreaker && <small>Bruten av {chicagoBreaker.name} · +10 p</small>}
+                </div>}
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
                   <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
                 {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
@@ -818,6 +841,7 @@ function Table({
                   : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är slut"}</h2>}
                 {game.tableStage === "result" && !pendingTrick && !flight && <div className="round-summary">
                   <div><span>SISTA STICKET</span><strong>{finalTrickWinner?.name} · +{game.finalTrickAward?.points ?? 0} p</strong></div>
+                  {game.chicagoAward && <div><span>CHICAGO</span><strong>{chicagoPlayer?.name} · {game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} p</strong></div>}
                   <div><span>BÄSTA HANDEN VID RUNDANS SLUT</span><strong>{finalAward?.winnerId
                     ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalAward.evaluations[finalAward.winnerId].label} · +${finalAward.points} p`
                     : "Ingen fick poäng för handen · 0 p"}</strong></div>
@@ -886,6 +910,13 @@ function Table({
                 ))}
               </div>
               {exchanging && handAction}
+              {playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
+                <button type="button" className="button chicago-button" onClick={onDeclareChicago}
+                  disabled={!canDeclareChicago || exchangeBusy || !!flight}>
+                  Säg Chicago · alla fem stick (+15 / −15)
+                </button>}
+              {playingTricks && !game.chicagoPlayerId && local.score < 15 && !game.completedTricks.length &&
+                <div className="chicago-hint">Chicago kräver minst 15 poäng.</div>}
               {game.trickError && <div className="selection-count selection-error" role="status">{game.trickError}</div>}
             </div>
           </div>
@@ -918,7 +949,7 @@ function Table({
             </div>)}
           </div>}
           <div className="table-rule">
-            <FinalTrickRule />
+            <FinalTrickRule points={game.settings.finalTrickPoints} />
           </div>
           {(!exchanging || game.activity.length > 0) && <div className={`table-activity ${exchanging ? "table-activity-quiet" : ""}`} aria-live="polite">
             <span>SENASTE HÄNDELSER</span>
@@ -1114,6 +1145,10 @@ export default function App() {
     ) : <Landing onEnter={setMode} />;
   if (view.phase === "lobby")
     return <><Lobby game={view} viewerId={viewerId} online={online}
+      onSettings={(settings) => {
+        if (online) void send({ type: "set-settings", settings });
+        else setGame((current) => current && applyCommand(current, { type: "set-settings", actorId: viewerId, settings }));
+      }}
       onAddDemo={() => setGame((current) => current && applyCommand(current, { type: "add-bot", actorId: viewerId }))}
       onStart={() => {
         setReviewedTrickCount(0);
@@ -1137,6 +1172,10 @@ export default function App() {
     exchangeBusy={busy || view.exchangeSubmittedPlayerIds.includes(viewerId)}
     visibleDiscard={view.discardCount}
     onPlayTrickCard={playHumanCard}
+    onDeclareChicago={() => {
+      if (online) void send({ type: "declare-chicago" });
+      else setGame((current) => current && applyCommand(current, { type: "declare-chicago", actorId: viewerId }));
+    }}
     flight={flight}
     reviewedTrickCount={reviewedTrickCount}
     onCardLanded={() => { busyRef.current = false; setFlight(null); }}

@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { applyCommand, createRoom, randomRoomCode, viewForPlayer } from "../src/game.ts";
-import type { GameCommand, GameState } from "../src/game.ts";
+import type { GameCommand, GameSettings, GameState } from "../src/game.ts";
 
 type Env = { ROOMS: DurableObjectNamespace<GameRoom>; FRONTEND_ORIGIN: string };
 type Session = { playerId: string; token: string };
@@ -82,7 +82,7 @@ export class GameRoom extends DurableObject<Env> {
     if (path === "/state" && request.method === "GET")
       return json({ view: this.view(saved, session.playerId) });
     if (path === "/command" && request.method === "POST") {
-      const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown } | null;
+      const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown; settings?: GameSettings } | null;
       let command: GameCommand | null = null;
       if (input?.type === "start-round") command = { type: "start-round", actorId: session.playerId };
       if (input?.type === "exchange" && Array.isArray(input.discardIds) &&
@@ -90,6 +90,9 @@ export class GameRoom extends DurableObject<Env> {
         command = { type: "exchange", actorId: session.playerId, discardIds: input.discardIds };
       if (input?.type === "play-card" && typeof input.cardId === "string")
         command = { type: "play-card", actorId: session.playerId, cardId: input.cardId };
+      if (input?.type === "declare-chicago") command = { type: "declare-chicago", actorId: session.playerId };
+      if (input?.type === "set-settings" && input.settings)
+        command = { type: "set-settings", actorId: session.playerId, settings: input.settings };
       if (input?.type === "return-lobby") command = { type: "return-lobby", actorId: session.playerId };
       if (!command) return json({ error: "Ogiltigt drag." }, 400);
       const next = applyCommand(saved.game, command);

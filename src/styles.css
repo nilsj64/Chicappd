@@ -1956,3 +1956,35 @@ input:focus-visible {
   background: #493b34;
   box-shadow: 0 8px 24px #0003;
 }
+.room-rule label {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 0.85rem;
+}
+.room-rule select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #b9b0a2;
+  border-radius: 8px;
+  background: #fffdf9;
+  color: #24211e;
+  font: inherit;
+}
+.chicago-button {
+  margin-top: 12px;
+  background: #f5d180;
+  color: #302210;
+}
+.chicago-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.chicago-hint { margin-top: 6px; font-size: 0.8rem; color: #f5d180; }
+.chicago-status {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+  border: 1px solid #e5bd68;
+  border-radius: 10px;
+  background: #423617;
+  color: #fff3ce;
+  text-align: center;
+}
