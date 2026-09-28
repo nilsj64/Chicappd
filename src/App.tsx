@@ -102,6 +102,14 @@ function PlayingCard({
   );
 }
 
+function CardBackMark() {
+  return (
+    <svg className="card-back-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+      <path d="M50 9v82M9 50h82M21 21l58 58M79 21 21 79" />
+    </svg>
+  );
+}
+
 function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string }) {
   return (
     <div
@@ -109,7 +117,7 @@ function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string 
       data-card-id={cardId}
       aria-label="Kort med baksidan uppåt"
     >
-      <span>✳</span>
+      <CardBackMark />
     </div>
   );
 }
@@ -181,7 +189,7 @@ function Landing({ onEnter }: { onEnter: (mode: EntryMode) => void }) {
           <div className="art-ring art-ring-two" />
           <div className="art-label art-label-top">FEM KORT. ETT BORD.</div>
           <div className="art-card art-card-back">
-            <span>✳</span>
+            <CardBackMark />
           </div>
           <div className="art-card art-card-heart">
             <span className="art-corner">

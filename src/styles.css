@@ -11,6 +11,19 @@ body {
   margin: 0;
   min-width: 320px;
 }
+.table-page,
+.lobby-page,
+.playing-card,
+.card-back,
+.hero-art {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.table-page :is(input, textarea, [contenteditable="true"]),
+.lobby-page :is(input, textarea, [contenteditable="true"]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
 button,
 input {
   font: inherit;
@@ -255,10 +268,10 @@ p {
   border: 1px solid #b9cdbd;
   border-radius: 7px;
 }
-.art-card-back span {
+.art-card-back .card-back-mark {
   color: #d8dbbe;
-  font-size: 98px;
-  font-family: serif;
+  width: 98px;
+  height: 98px;
 }
 .art-card-heart {
   top: 134px;
@@ -1332,9 +1345,13 @@ p {
   border: 1px solid #bbd0b8;
   border-radius: 3px;
 }
-.card-back span {
-  font-family: serif;
-  font-size: 45px;
+.card-back-mark {
+  display: block;
+  width: 45px;
+  height: 45px;
+  stroke: currentColor;
+  stroke-width: 8;
+  stroke-linecap: round;
 }
 .card-small {
   width: 49px;
@@ -1345,8 +1362,9 @@ p {
 .card-small:before {
   inset: 3px;
 }
-.card-back.card-small > span {
-  font-size: 23px;
+.card-back.card-small > .card-back-mark {
+  width: 23px;
+  height: 23px;
 }
 .playing-card.card-small {
   width: 49px;
