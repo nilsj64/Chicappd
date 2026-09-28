@@ -6,11 +6,22 @@ type Reply = { view?: GameView; token?: string; playerId?: string; error?: strin
 const storageKey = "chicappd-online-session";
 
 function roomView(view: GameView | undefined): GameView {
-  if (!view) throw new Error("Spelservern gav ett ofullständigt svar.");
-  if (!view.settings || ![2, 5].includes(view.settings.finalTrickPoints) ||
-    typeof view.settings.allowNegativeScores !== "boolean")
-    throw new Error("Spelservern behöver uppdateras innan nya rum kan användas. Försök igen senare.");
-  return view;
+  if (!view) {
+    throw new Error("Spelservern gav ett ofullständigt svar.");
+  }
+
+  if (!view.settings) {
+    throw new Error("Spelservern gav ett ofullständigt svar.");
+  }
+
+  return {
+    ...view,
+    settings: {
+      ...view.settings,
+      finalTrickPoints: view.settings.finalTrickPoints ?? 5,
+      allowNegativeScores: view.settings.allowNegativeScores ?? false,
+    },
+  };
 }
 
 export function savedSession(): OnlineSession | null {
