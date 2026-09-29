@@ -27,6 +27,8 @@ Open the Vite URL in two different browsers or browser profiles. Create a room i
 2. Run `npm run server:deploy`. Copy the `https://chicappd-rooms.<your-subdomain>.workers.dev` URL printed by Wrangler.
 3. In GitHub repository **Settings → Secrets and variables → Actions → Variables**, add `MULTIPLAYER_API_URL` with that HTTPS URL (no trailing slash). The Pages workflow exposes this public URL to Vite at build time. Run the **Deploy GitHub Pages** workflow or push the changes to `main`.
 
+After changing Worker routes, deploy the Worker before using the updated Pages client. Verify that the public Worker accepts the client's leave request with `CHICAPPD_TEST_API=https://chicappd-rooms.<your-subdomain>.workers.dev npm run test:deployed-leave`.
+
 The public Worker URL is not a credential. Room tokens are generated on the Worker and stored only in each player's browser; service credentials are never sent to GitHub Pages. If your Pages site uses a custom domain, update `FRONTEND_ORIGIN` in `wrangler.jsonc` to that site's exact origin and deploy the Worker again.
 
 ## Game rules and project layout

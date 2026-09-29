@@ -9,6 +9,7 @@
     "server:check": "tsc --noEmit --moduleResolution bundler --module esnext --target es2022 --skipLibCheck --allowImportingTsExtensions --types @cloudflare/workers-types server/worker.ts && wrangler deploy --dry-run",
     "server:deploy": "wrangler deploy",
     "test:online": "node --experimental-strip-types --test tests/online.integration.mjs",
+    "test:deployed-leave": "node --test tests/deployed-leave.smoke.mjs",
     "build": "tsc --noEmit && vite build",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "preview": "vite preview --host 0.0.0.0"

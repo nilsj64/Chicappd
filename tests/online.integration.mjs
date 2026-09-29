@@ -30,30 +30,36 @@ test("leaving during a submitted exchange removes the player and resets the room
   const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
   const code = owner.view.roomCode;
   const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bo" } });
-  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
-    body: { type: "start-round" } })).status, 200);
-  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
-    body: { type: "exchange", discardIds: [] } })).status, 200);
-  const returned = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
-    body: { type: "return-lobby" } });
-  assert.equal(returned.status, 200);
-  assert.equal(returned.view.phase, "lobby");
-  assert.deepEqual(returned.view.exchangeSubmittedPlayerIds, []);
-  assert.ok(returned.view.players.every((player) => player.handCount === 0));
-  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
-    body: { type: "start-round" } })).status, 200);
-  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
-    body: { type: "exchange", discardIds: [] } })).status, 200);
-  assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token })).status, 200);
-  assert.equal((await call(`/rooms/${code}/state`, { token: guest.token })).status, 401);
-  const lobby = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
-  assert.equal(lobby.phase, "lobby");
-  assert.equal(lobby.players.length, 1);
-  assert.equal(lobby.players[0].handCount, 0);
-  assert.deepEqual(lobby.exchangeSubmittedPlayerIds, []);
-  assert.deepEqual(lobby.activity, []);
-  assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token })).status, 200);
-  assert.equal((await call(`/rooms/${code}/state`, { token: owner.token })).status, 404);
+  const watcher = watch(code, owner.token);
+  try {
+    await until(() => watcher.messages.length > 0);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "start-round" } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "exchange", discardIds: [] } })).status, 200);
+    const returned = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "return-lobby" } });
+    assert.equal(returned.status, 200);
+    assert.equal(returned.view.phase, "lobby");
+    assert.deepEqual(returned.view.exchangeSubmittedPlayerIds, []);
+    assert.ok(returned.view.players.every((player) => player.handCount === 0));
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "start-round" } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "exchange", discardIds: [] } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token })).status, 200);
+    assert.equal((await call(`/rooms/${code}/state`, { token: guest.token })).status, 401);
+    const lobby = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+    assert.equal(lobby.phase, "lobby");
+    assert.equal(lobby.players.length, 1);
+    assert.equal(lobby.players[0].handCount, 0);
+    assert.deepEqual(lobby.exchangeSubmittedPlayerIds, []);
+    assert.deepEqual(lobby.activity, []);
+    await until(() => watcher.messages.at(-1)?.view.phase === "lobby" &&
+      watcher.messages.at(-1)?.view.players.length === 1);
+    assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token })).status, 200);
+    assert.equal((await call(`/rooms/${code}/state`, { token: owner.token })).status, 404);
+  } finally { watcher.socket.close(); }
 });
 
 test("two real room clients complete a round with private hands and live updates", async () => {
