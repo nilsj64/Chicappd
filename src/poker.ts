@@ -166,3 +166,15 @@ export function compareHands(
   }
   return 0;
 }
+
+const rankDisplay: Record<number, string> = {
+  2: "två", 3: "tre", 4: "fyra", 5: "fem", 6: "sex", 7: "sju",
+  8: "åtta", 9: "nio", 10: "tio", 11: "knekt", 12: "dam", 13: "kung", 14: "ess",
+};
+
+/** Reveal comparison ranks only at showdown when the category alone cannot decide. */
+export function showdownHandLabel(evaluation: HandEvaluation, all: readonly HandEvaluation[]): string {
+  return all.some((other) => other !== evaluation && other.category === evaluation.category)
+    ? `${evaluation.label} (jämförelse: ${evaluation.tiebreakers.map((rank) => rankDisplay[rank]).join(", ")})`
+    : evaluation.label;
+}

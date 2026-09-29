@@ -1,4 +1,4 @@
-import { compareHands, evaluateHand } from "./poker.ts";
+import { compareHands, evaluateHand, showdownHandLabel } from "./poker.ts";
 import type { HandEvaluation } from "./poker.ts";
 import { chooseBotDiscards, chooseBotTrickCard } from "./bot.ts";
 import { legalCards, trickWinner } from "./tricks.ts";
@@ -209,6 +209,19 @@ export function startRound(game: GameState): GameState {
   };
 }
 
+function returnToLobby(game: GameState): GameState {
+  return {
+    ...game, phase: "lobby", tableStage: "exchange",
+    players: game.players.map((player) => ({ ...player, hand: [] })),
+    deck: createDeck(), discard: [], activePlayerId: null,
+    selectedCardIds: [], exchangeCount: 0, exchangeSubmittedPlayerIds: [],
+    exchangeFeedback: null, handAwards: [], finalHands: null, finalTrickAward: null,
+    chicagoPlayerId: null, chicagoBreakerId: null, chicagoAward: null,
+    activity: [], currentTrick: [], completedTricks: [],
+    waitingForNextTrick: false, trickError: null,
+  };
+}
+
 export function toggleCard(game: GameState, cardId: string): GameState {
   if (game.phase !== "table" || game.tableStage !== "exchange") return game;
   const localHand = game.players.find((player) => player.id === game.ownerId)?.hand ?? [];
@@ -240,7 +253,9 @@ function scorePokerHands(
     players: winnerId ? addPoints(game, game.players, winnerId, points) : game.players,
     handAwards: [...game.handAwards, award],
     activity: [...game.activity, winnerId
-      ? `${best!.name} har bäst hand efter byte ${exchangeCount}: ${evaluations[winnerId].label} (+${points} p)`
+      ? exchangeCount === 3
+        ? `${best!.name} har bäst hand vid rundans slut: ${showdownHandLabel(evaluations[winnerId], Object.values(evaluations))} (+${points} p)`
+        : `${best!.name} fick ${points} p för bästa handen efter byte ${exchangeCount}`
       : `Ingen fick poäng för handen efter byte ${exchangeCount}`],
   };
 }
@@ -565,19 +580,21 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
     case "add-bot":
       return command.actorId === game.ownerId ? addDemoPlayer(game) : game;
     case "remove-player":
-      if (game.phase !== "lobby" || (command.actorId !== command.playerId && command.actorId !== game.ownerId)) return game;
-      const players = game.players.filter((p) => p.id !== command.playerId);
+      if (command.actorId !== command.playerId &&
+        (game.phase !== "lobby" || command.actorId !== game.ownerId)) return game;
+      const remaining = game.players.filter((p) => p.id !== command.playerId);
+      const players = remaining.some((p) => p.control === "human") ? remaining : [];
       if (players.length === game.players.length) return game;
-      if (command.playerId === game.ownerId && !players.some((p) => p.control === "human"))
-        return { ...game, players: [], ownerId: "" };
-      return { ...game, players, ownerId: command.playerId === game.ownerId
-        ? players.find((p) => p.control === "human")!.id : game.ownerId };
+      const ownerId = command.playerId === game.ownerId
+        ? players.find((p) => p.control === "human")?.id ?? "" : game.ownerId;
+      const next = { ...game, players, ownerId };
+      return game.phase === "table" ? returnToLobby(next) : next;
     case "start-round":
       return command.actorId === game.ownerId || (game.phase === "table" && game.tableStage === "result")
         ? startRound(game) : game;
     case "return-lobby":
       return command.actorId === game.ownerId && game.phase === "table"
-        ? { ...game, phase: "lobby", selectedCardIds: [], exchangeSubmittedPlayerIds: [] } : game;
+        ? returnToLobby(game) : game;
     case "exchange": {
       if (game.phase !== "table" || game.tableStage !== "exchange" || game.exchangeCount >= 3 ||
         !Array.isArray(command.discardIds) || command.discardIds.length > 5 ||

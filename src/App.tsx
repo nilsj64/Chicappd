@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { evaluateHand } from "./poker";
+import { evaluateHand, showdownHandLabel } from "./poker";
 import type { Card, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
@@ -13,7 +13,7 @@ import {
 import { legalCards } from "./tricks";
 import type { PlayedCard } from "./tricks";
 import { supportAdvice } from "./support";
-import { API_URL, commandOnline, enterOnline, loadOnline, savedSession, saveSession, watchOnline } from "./online";
+import { API_URL, commandOnline, enterOnline, leaveOnline, loadOnline, savedSession, saveSession, watchOnline } from "./online";
 import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { StarMark } from "./Brand";
@@ -496,7 +496,7 @@ function Opponent({
       <div className="opponent-label">
         <Avatar player={player} viewerId={viewerId} size="small" />
         <span>
-          <strong>{player.name}</strong>
+          <strong className="table-player-name">{player.name} <span className="table-player-score">{player.score} p</span></strong>
           <small>{active ? "Spelar nu" : "Vid bordet"}</small>
         </span>
       </div>
@@ -693,6 +693,7 @@ function Table({
   const selectionCount = selectedCardIds.length;
   const currentEvaluation = exchanging ? evaluateHand(local.hand) : null;
   const finalAward = game.handAwards.find((award) => award.exchangeCount === 3);
+  const showdownEvaluations = Object.values(finalAward?.evaluations ?? {});
   const finalTrickWinner = game.players.find((player) => player.id === game.finalTrickAward?.winnerId);
   const chicagoPlayer = game.players.find((player) => player.id === game.chicagoPlayerId);
   const chicagoBreaker = game.players.find((player) => player.id === game.chicagoBreakerId);
@@ -766,7 +767,7 @@ function Table({
             <span className="live-dot" /> {online ? "Onlinespel" : "Övningsspel"}
           </span>
         </div>
-        <button className="table-exit" onClick={onLeave} disabled={exchangeBusy}>
+        <button className="table-exit" onClick={onLeave}>
           Lämna spelet <span>↗</span>
         </button>
       </header>
@@ -796,7 +797,9 @@ function Table({
                   flight={flight}
                   onCardLanded={onCardLanded}
                   announcement={game.tableStage === "result" && !flight
-                    ? finalAward?.evaluations[player.id]?.label : undefined}
+                    ? finalAward?.evaluations[player.id]
+                      ? showdownHandLabel(finalAward.evaluations[player.id], showdownEvaluations) : undefined
+                    : undefined}
                 />
               ))}
             </div>
@@ -831,10 +834,11 @@ function Table({
                   <div><span>SISTA STICKET</span><strong>{finalTrickWinner?.name} · +{game.finalTrickAward?.points ?? 0} p</strong></div>
                   {game.chicagoAward && <div><span>CHICAGO</span><strong>{chicagoPlayer?.name} · {game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} p</strong></div>}
                   <div><span>BÄSTA HANDEN VID RUNDANS SLUT</span><strong>{finalAward?.winnerId
-                    ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalAward.evaluations[finalAward.winnerId].label} · +${finalAward.points} p`
+                    ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${showdownHandLabel(finalAward.evaluations[finalAward.winnerId], showdownEvaluations)} · +${finalAward.points} p`
                     : "Ingen fick poäng för handen · 0 p"}</strong></div>
                   <div className="round-hands"><span>HÄNDER VID RUNDANS SLUT</span>{game.players.map((player) => <small key={player.id}>
-                    {player.name}: {finalAward?.evaluations[player.id]?.label}
+                    {player.name}: {finalAward?.evaluations[player.id]
+                      ? showdownHandLabel(finalAward.evaluations[player.id], showdownEvaluations) : ""}
                   </small>)}</div>
                   <button className="button button-next-round" onClick={onNextRound}>
                     Spela en runda till <span aria-hidden="true">→</span>
@@ -844,21 +848,22 @@ function Table({
             </div>
             <div className="your-area">
               {exchanging && <div className="hand-combination" aria-live="polite">{currentEvaluation?.label}</div>}
-              {!exchanging && <div className="your-label">
+              <div className="your-label">
                 <Avatar player={local} viewerId={viewerId} size="small" />
                 <span>
                   <strong>
-                    {local.name} <em>DU</em>
+                    {local.name} <em>DU</em> <span className="table-player-score">{local.score} p</span>
                   </strong>
                   <small>
-                    {game.tableStage === "result"
+                    {exchanging ? "Välj kort att byta eller behåll handen"
+                      : game.tableStage === "result"
                       ? "Alla fem stick spelade"
                       : reviewingTrick ? "Nästa stick börjar snart"
                       : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} spelar…`
                       : "Tryck på ett kort eller dra det till bordet"}
                   </small>
                 </span>
-              </div>}
+              </div>
               {!exchanging && <PlayedStack cards={playedCardsForPlayer(game, local.id)} player={local}
                 currentCardIds={currentCardIds} flight={flight} onCardLanded={onCardLanded} />}
               <div className="your-hand">
@@ -953,7 +958,7 @@ function Table({
           </div>}
           <div className="table-controls">
             <span>{online ? "ONLINESPEL" : "LOKAL ÖVNING"}</span>
-            <button onClick={onLobby} disabled={exchangeBusy || (online && game.ownerId !== viewerId)}>
+            <button onClick={onLobby} disabled={online && game.ownerId !== viewerId}>
               ← <span>Till väntrummet</span>
             </button>
           </div>
@@ -981,7 +986,9 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const gameRef = useRef(game);
   const busyRef = useRef(false);
+  const onlineSessionRef = useRef(onlineSession);
   gameRef.current = game;
+  onlineSessionRef.current = onlineSession;
   const online = !!onlineSession;
   const view = online ? remoteView : game && viewerId ? viewForPlayer(game, viewerId) : null;
 
@@ -997,19 +1004,23 @@ export default function App() {
     return () => { active = false; stop(); };
   }, [onlineSession]);
 
-  async function send(command: object) {
-    if (!onlineSession || busyRef.current) return;
+  async function send(command: object, allowDuringBusy = false) {
+    if (!onlineSession || (busyRef.current && !allowDuringBusy)) return;
+    const session = onlineSession;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      const next = await commandOnline(onlineSession, command);
-      setRemoteView((current) => (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current);
+      const next = await commandOnline(session, command);
+      if (onlineSessionRef.current === session)
+        setRemoteView((current) => (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current);
     } catch (cause) {
+      if (onlineSessionRef.current !== session) return;
       setError((cause as Error).message);
       try {
-        const next = await loadOnline(onlineSession);
-        setRemoteView((current) => (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current);
+        const next = await loadOnline(session);
+        if (onlineSessionRef.current === session)
+          setRemoteView((current) => (next.revision ?? 0) >= (current?.revision ?? 0) ? next : current);
       } catch { /* Reconnect will refresh. */ }
     } finally {
       busyRef.current = false;
@@ -1116,21 +1127,33 @@ export default function App() {
       setBusy(false);
     }
   }
-  function leave() {
+  function clearRoom() {
     busyRef.current = false;
     setFlight(null);
+    setSelectedCardIds([]);
+    setReviewedTrickCount(0);
+    setError(null);
+    setBusy(false);
     setGame(null);
     setRemoteView(null);
+    onlineSessionRef.current = null;
     setOnlineSession(null);
     saveSession(null);
     setViewerId(null);
     setMode(null);
   }
+  async function leave() {
+    if (onlineSession) {
+      try { await leaveOnline(onlineSession); }
+      catch (cause) { setError((cause as Error).message); return; }
+    }
+    clearRoom();
+  }
   if (physicalOpen) return <IRLTable onExit={() => setPhysicalOpen(false)} />;
   if (onlineSession && !view) return <div className="entry-page"><div className="page-width entry-layout"><div>
     <Brand /><h1>Återansluter till rummet…</h1>
     {error && <p role="alert">{error}</p>}
-    <button className="button button-secondary" onClick={leave}>Till startsidan</button>
+    <button className="button button-secondary" onClick={clearRoom}>Till startsidan</button>
   </div></div></div>;
   if (!view || !viewerId)
     return mode ? (
@@ -1148,7 +1171,7 @@ export default function App() {
         if (online) void send({ type: "start-round" });
         else setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
       }}
-      onLeave={leave} />{error && <div className="network-message" role="alert">{error}</div>}
+      onLeave={() => void leave()} />{error && <div className="network-message" role="alert">{error}</div>}
       {online && !connected && <div className="network-message" role="status">Återansluter till spelservern…</div>}</>;
   return <><Table
     game={view}
@@ -1178,11 +1201,11 @@ export default function App() {
       else setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
     }}
     onLobby={() => {
-      busyRef.current = false; setFlight(null); setSelectedCardIds([]);
-      if (online) void send({ type: "return-lobby" });
+      busyRef.current = false; setFlight(null); setSelectedCardIds([]); setReviewedTrickCount(0);
+      if (online) void send({ type: "return-lobby" }, true);
       else setGame((current) => current && applyCommand(current, { type: "return-lobby", actorId: viewerId }));
     }}
-    onLeave={leave}
+    onLeave={() => void leave()}
   />{error && <div className="network-message" role="alert">{error}</div>}
     {online && !connected && <div className="network-message" role="status">Återansluter till spelservern…</div>}</>;
 }

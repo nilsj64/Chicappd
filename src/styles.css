@@ -863,9 +863,21 @@ p {
 .opponent-active .opponent-label {
   border-color: #d7d2a0;
 }
-.opponent-label span:last-child {
+.opponent-label > span:last-child {
   display: flex;
   flex-direction: column;
+}
+.table-player-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+.table-player-score {
+  flex: none;
+  color: #f2dca6;
+  font: 700 10px "DM Sans", sans-serif;
+  white-space: nowrap;
 }
 .opponent-label strong {
   font-size: 12px;
@@ -1819,6 +1831,9 @@ input:focus-visible {
   }
   .opponent-label strong {
     font-size: 10px;
+  }
+  .table-player-score {
+    font-size: 9px;
   }
   .opponent-label small {
     display: none;

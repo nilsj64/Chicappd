@@ -60,6 +60,11 @@ export async function commandOnline(session: OnlineSession, command: object) {
   });
   return roomView(data.view);
 }
+export async function leaveOnline(session: OnlineSession) {
+  await call(`/rooms/${session.code}/leave`, {
+    method: "POST", headers: { authorization: `Bearer ${session.token}` },
+  });
+}
 export function watchOnline(session: OnlineSession, onView: (view: GameView) => void,
   onStatus: (connected: boolean) => void) {
   let closed = false;

@@ -81,6 +81,19 @@ export class GameRoom extends DurableObject<Env> {
     if (!session) return json({ error: "Ogiltig spelarsession." }, 401);
     if (path === "/state" && request.method === "GET")
       return json({ view: this.view(saved, session.playerId) });
+    if (path === "/leave" && request.method === "POST") {
+      const next = applyCommand(saved.game, {
+        type: "remove-player", actorId: session.playerId, playerId: session.playerId,
+      });
+      if (next === saved.game) return json({ error: "Kunde inte lämna rummet." }, 409);
+      saved = { ...saved, game: next, sessions: saved.sessions.filter((item) => item.token !== session.token) };
+      await this.persist(saved);
+      for (const socket of this.ctx.getWebSockets()) {
+        if (socket.deserializeAttachment() === session.playerId) socket.close();
+      }
+      if (!next.players.length) await this.ctx.storage.delete("room");
+      return json({ left: true });
+    }
     if (path === "/command" && request.method === "POST") {
       const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown; settings?: GameSettings } | null;
       let command: GameCommand | null = null;
@@ -124,7 +137,7 @@ export default {
       "access-control-max-age": "86400",
     } });
     const url = new URL(request.url);
-    const match = url.pathname.match(/^\/rooms\/([A-HJ-NP-Z2-9]{5})\/(join|state|command|events)$/);
+    const match = url.pathname.match(/^\/rooms\/([A-HJ-NP-Z2-9]{5})\/(join|state|command|events|leave)$/);
     let response: Response;
     if (url.pathname === "/rooms" && request.method === "POST") {
       const body = await request.text();

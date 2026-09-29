@@ -97,3 +97,83 @@ test("authoritative commands complete five tricks and preserve scoring", () => {
   assert.equal(game.players.reduce((sum, p) => sum + p.score, 0),
     game.handAwards.reduce((sum, award) => sum + award.points, 0) + 5);
 });
+
+test("returning to lobby clears every round field while keeping players, scores and rules", () => {
+  for (const stage of ["exchange", "tricks", "result"]) {
+    let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
+    if (stage !== "exchange") {
+      for (let exchange = 0; exchange < 3; exchange++) {
+        game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+        game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
+      }
+    }
+    if (stage === "result") {
+      while (game.tableStage !== "result") {
+        const actor = game.players.find((p) => p.id === game.activePlayerId);
+        const card = legalCards(actor.hand, game.currentTrick[0]?.card.suit ?? null)[0];
+        game = applyCommand(game, { type: "play-card", actorId: actor.id, cardId: card.id });
+        if (game.waitingForNextTrick)
+          game = applyCommand(game, { type: "continue-trick", actorId: "human-a" });
+      }
+    }
+    const scores = game.players.map((p) => p.score);
+    assert.strictEqual(applyCommand(game, { type: "return-lobby", actorId: "human-b" }), game);
+    const lobby = applyCommand(game, { type: "return-lobby", actorId: "human-a" });
+    assert.equal(lobby.phase, "lobby");
+    assert.equal(lobby.tableStage, "exchange");
+    assert.deepEqual(lobby.players.map((p) => p.score), scores);
+    assert.deepEqual(viewForPlayer(lobby, "human-a").players.map((p) => p.score), scores);
+    assert.ok(lobby.players.every((p) => p.hand.length === 0));
+    assert.equal(lobby.deck.length, 52);
+    assert.equal(lobby.discard.length, 0);
+    assert.equal(lobby.exchangeCount, 0);
+    assert.deepEqual(lobby.handAwards, []);
+    assert.deepEqual(lobby.currentTrick, []);
+    assert.deepEqual(lobby.completedTricks, []);
+    assert.deepEqual(lobby.activity, []);
+    assert.equal(lobby.finalHands, null);
+    assert.equal(lobby.finalTrickAward, null);
+    assert.equal(lobby.waitingForNextTrick, false);
+    assert.equal(lobby.activePlayerId, null);
+    assert.equal(applyCommand(lobby, { type: "start-round", actorId: "human-a" }).phase, "table");
+  }
+});
+
+test("leaving an active room removes the player and returns remaining players to a clean lobby", () => {
+  let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.deepEqual(game.exchangeSubmittedPlayerIds, ["human-a"]);
+  game = applyCommand(game, { type: "remove-player", actorId: "human-a", playerId: "human-a" });
+  assert.equal(game.phase, "lobby");
+  assert.equal(game.ownerId, "human-b");
+  assert.deepEqual(game.players.map((p) => p.id), ["human-b"]);
+  assert.equal(game.players[0].hand.length, 0);
+  assert.deepEqual(game.exchangeSubmittedPlayerIds, []);
+  assert.equal(viewForPlayer(game, "human-a"), null);
+  assert.equal(applyCommand(game, { type: "add-human", actorId: "human-b", playerId: "human-c", name: "Cy" }).players.length, 2);
+});
+
+test("early activity hides private hand details and result activity reveals the winning comparison", () => {
+  let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
+  for (let exchange = 0; exchange < 2; exchange++) {
+    game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+    game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
+    assert.deepEqual(viewForPlayer(game, "human-a").players.map((p) => p.score),
+      game.players.map((p) => p.score));
+    assert.ok(game.activity.some((event) => /fick \d+ p för bästa handen|Ingen fick poäng/.test(event)));
+    assert.ok(game.activity.every((event) => !/jämförelse:|Ett par|Två par|Triss|Kåk|Fyrtal|Högt kort|Färg|Stege/.test(event)));
+    assert.deepEqual(viewForPlayer(game, "human-a").handAwards.at(-1).evaluations, {});
+  }
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
+  while (game.tableStage !== "result") {
+    const actor = game.players.find((p) => p.id === game.activePlayerId);
+    const card = legalCards(actor.hand, game.currentTrick[0]?.card.suit ?? null)[0];
+    game = applyCommand(game, { type: "play-card", actorId: actor.id, cardId: card.id });
+    if (game.waitingForNextTrick)
+      game = applyCommand(game, { type: "continue-trick", actorId: "human-a" });
+  }
+  assert.ok(Object.keys(viewForPlayer(game, "human-a").handAwards.at(-1).evaluations).length === 2);
+  if (game.handAwards.at(-1).winnerId)
+    assert.ok(game.activity.at(-1).includes(game.handAwards.at(-1).evaluations[game.handAwards.at(-1).winnerId].label));
+});

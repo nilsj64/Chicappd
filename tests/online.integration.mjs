@@ -26,6 +26,36 @@ async function until(predicate, timeout = 3000) {
   }
 }
 
+test("leaving during a submitted exchange removes the player and resets the room", async () => {
+  const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
+  const code = owner.view.roomCode;
+  const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bo" } });
+  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+    body: { type: "start-round" } })).status, 200);
+  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+    body: { type: "exchange", discardIds: [] } })).status, 200);
+  const returned = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+    body: { type: "return-lobby" } });
+  assert.equal(returned.status, 200);
+  assert.equal(returned.view.phase, "lobby");
+  assert.deepEqual(returned.view.exchangeSubmittedPlayerIds, []);
+  assert.ok(returned.view.players.every((player) => player.handCount === 0));
+  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+    body: { type: "start-round" } })).status, 200);
+  assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+    body: { type: "exchange", discardIds: [] } })).status, 200);
+  assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token })).status, 200);
+  assert.equal((await call(`/rooms/${code}/state`, { token: guest.token })).status, 401);
+  const lobby = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+  assert.equal(lobby.phase, "lobby");
+  assert.equal(lobby.players.length, 1);
+  assert.equal(lobby.players[0].handCount, 0);
+  assert.deepEqual(lobby.exchangeSubmittedPlayerIds, []);
+  assert.deepEqual(lobby.activity, []);
+  assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token })).status, 200);
+  assert.equal((await call(`/rooms/${code}/state`, { token: owner.token })).status, 404);
+});
+
 test("two real room clients complete a round with private hands and live updates", async () => {
   const a = await call("/rooms", { method: "POST", body: { name: "Ada" } });
   assert.equal(a.status, 201);

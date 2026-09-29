@@ -18,7 +18,7 @@ import {
   playedCardsForPlayer,
   finalTrickPoints,
 } from "../src/game.ts";
-import { compareHands, evaluateHand } from "../src/poker.ts";
+import { compareHands, evaluateHand, showdownHandLabel } from "../src/poker.ts";
 import { chooseBotDiscards, chooseBotTrickCard } from "../src/bot.ts";
 import { legalCards, trickWinner } from "../src/tricks.ts";
 
@@ -40,6 +40,15 @@ const examples = [
   ["four-of-a-kind", hand(["8", S], ["8", H], ["8", D], ["8", C], ["3", S])],
   ["straight-flush", hand(["9", H], ["8", H], ["7", H], ["6", H], ["5", H])],
 ];
+
+test("showdown explains ranks only when players share a hand category", () => {
+  const aces = evaluateHand(hand(["A", S], ["A", H], ["9", D], ["6", C], ["3", S]));
+  const kings = evaluateHand(hand(["K", S], ["K", H], ["Q", D], ["6", C], ["3", S]));
+  const flush = evaluateHand(hand(["A", H], ["J", H], ["9", H], ["6", H], ["3", H]));
+  assert.equal(showdownHandLabel(aces, [aces, flush]), aces.label);
+  assert.match(showdownHandLabel(aces, [aces, kings]), /jämförelse: ess, nio, sex, tre/);
+  assert.ok(compareHands(aces, kings) > 0);
+});
 
 test("recognizes all nine categories in strength order", () => {
   for (const [category, cards] of examples)
