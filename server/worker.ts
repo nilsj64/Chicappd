@@ -54,7 +54,7 @@ export class GameRoom extends DurableObject<Env> {
     if (path === "/join" && request.method === "POST") {
       const name = (body as { name?: unknown } | null)?.name;
       if (!validName(name)) return json({ error: "Ange ett namn med högst 20 tecken." }, 400);
-      if (saved.game.phase !== "lobby" || saved.game.players.length >= 2)
+      if (saved.game.phase !== "lobby" || saved.game.players.length >= 4)
         return json({ error: "Rummet är fullt eller spelet har startat." }, 409);
       const playerId = crypto.randomUUID();
       const next = applyCommand(saved.game, {

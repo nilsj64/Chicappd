@@ -1,8 +1,8 @@
 # Chicappd
 
-Chicappd is a two-player online card game with a static React/Vite frontend on GitHub Pages and a Cloudflare Worker with one Durable Object per room. The Worker holds the only full game state. Each client receives a player-specific view and sends commands that the Worker validates in order. WebSockets update both clients automatically. A room code admits the second player; an unguessable temporary token identifies each seat and is saved in that browser for reloads. No account is required.
+Chicappd is a two-to-four-player online card game with a static React/Vite frontend on GitHub Pages and a Cloudflare Worker with one Durable Object per room. The Worker holds the only full game state. Each client receives a player-specific view and sends commands that the Worker validates in order. WebSockets update all clients automatically. A room code admits additional players; an unguessable temporary token identifies each seat and is saved in that browser for reloads. No account is required.
 
-The local practice mode against bots remains available. The online mode is limited to exactly two human players.
+The local practice mode against bots remains available. Online rooms support two to four human players.
 
 ## Local development
 

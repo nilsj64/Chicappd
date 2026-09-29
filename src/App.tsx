@@ -167,7 +167,7 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
             </button>
           </div>
           <div className="hero-footnote">
-            <span className="footnote-icon">✦</span> Onlinerum för två spelare
+            <span className="footnote-icon">✦</span> Onlinerum för upp till fyra spelare
           </div>
           <button className="text-button" onClick={() => onEnter("practice")}>Spela lokalt mot datorn →</button>
           <button className="text-button" onClick={onPhysical}>Spela med fysiska kort →</button>
@@ -383,16 +383,16 @@ function Lobby({
           <h1>
             Välkommen till <em>bordet.</em>
           </h1>
-          <p>{online ? "Dela rumskoden med en vän. När ni båda är här kan ägaren starta." : "Lägg till en datorspelare för lokal övning."}</p>
+          <p>{online ? "Dela rumskoden med upp till tre vänner. Ägaren kan starta när minst två spelare är här." : "Lägg till en datorspelare för lokal övning."}</p>
         </div>
         <div className="lobby-content">
           <section className="lobby-panel">
             <div className="panel-topline">
               <span>SPELARE</span>
-              <span>{game.players.length} AV {online ? 2 : 4} PLATSER</span>
+              <span>{game.players.length} AV 4 PLATSER</span>
             </div>
             <div className="seats-grid">
-              {Array.from({ length: online ? 2 : 4 }, (_, index) => (
+              {Array.from({ length: 4 }, (_, index) => (
                 <Seat key={index} player={game.players[index]} index={index} viewerId={viewerId} />
               ))}
             </div>
@@ -453,7 +453,7 @@ function Lobby({
             </button>
             <small>
               {game.players.length < 2
-                ? online ? "Vänta på den andra spelaren." : "Lägg till minst en datorspelare för att börja."
+                ? online ? "Vänta på minst en spelare till." : "Lägg till minst en datorspelare för att börja."
                 : online ? "Starta matchen med fem kort var." : "Starta en övningsrunda med fem kort var."}
             </small>
           </aside>

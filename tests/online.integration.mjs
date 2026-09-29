@@ -39,7 +39,6 @@ test("two real room clients complete a round with private hands and live updates
     await until(() => wa.messages.length && wb.messages.length);
     assert.equal(wa.messages.at(-1).view.players.length, 2);
     assert.equal(wb.messages.at(-1).view.players.length, 2);
-    assert.equal((await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Cy" } })).status, 409);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: b.token, body: { type: "start-round" } })).status, 409);
     const started = await call(`/rooms/${code}/command`, { method: "POST", token: a.token, body: { type: "start-round" } });
     assert.equal(started.status, 200);
@@ -112,4 +111,67 @@ test("two real room clients complete a round with private hands and live updates
     await until(() => wb.messages.at(-1)?.view.exchangeCount === 0 &&
       wb.messages.at(-1)?.view.completedTricks.length === 0);
   } finally { wa.socket.close(); wb.socket.close(); }
+});
+
+test("four humans can join, play a full round, and a fifth is refused", async () => {
+  const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
+  assert.equal(owner.status, 201);
+  const code = owner.view.roomCode;
+  const seats = [owner];
+  for (const name of ["Bo", "Cy", "Dee"]) {
+    const joined = await call(`/rooms/${code}/join`, { method: "POST", body: { name } });
+    assert.equal(joined.status, 200);
+    seats.push(joined);
+    assert.equal(joined.view.players.length, seats.length);
+  }
+  assert.equal((await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Eve" } })).status, 409);
+  const watchers = seats.map((seat) => watch(code, seat.token));
+  try {
+    await until(() => watchers.every((watcher) => watcher.messages.length));
+    assert.ok(watchers.every((watcher) => watcher.messages.at(-1).view.players.length === 4));
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: seats[1].token,
+      body: { type: "start-round" } })).status, 409);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "start-round" } })).status, 200);
+    await until(() => watchers.every((watcher) => watcher.messages.some((message) => message.view.phase === "table")));
+    for (const seat of seats) {
+      const view = (await call(`/rooms/${code}/state`, { token: seat.token })).view;
+      assert.equal(view.players.length, 4);
+      assert.deepEqual(view.players.map((player) => player.hand.length),
+        seats.map((candidate) => candidate.playerId === seat.playerId ? 5 : 0));
+    }
+    for (let exchange = 0; exchange < 3; exchange++) {
+      for (const [index, seat] of seats.entries()) {
+        const result = await call(`/rooms/${code}/command`, { method: "POST", token: seat.token,
+          body: { type: "exchange", discardIds: [] } });
+        assert.equal(result.status, 200);
+        assert.equal(result.view.exchangeCount, exchange + (index === 3 ? 1 : 0));
+      }
+    }
+    for (let play = 0; play < 20; play++) {
+      const state = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+      const seat = seats.find((candidate) => candidate.playerId === state.activePlayerId);
+      assert.ok(seat);
+      const view = (await call(`/rooms/${code}/state`, { token: seat.token })).view;
+      const hand = view.players.find((player) => player.id === seat.playerId).hand;
+      const card = legalCards(hand, view.currentTrick[0]?.card.suit ?? null)[0];
+      assert.ok(card);
+      const result = await call(`/rooms/${code}/command`, { method: "POST", token: seat.token,
+        body: { type: "play-card", cardId: card.id } });
+      assert.equal(result.status, 200);
+      if (result.view.waitingForNextTrick) {
+        const startedWaiting = Date.now();
+        while ((await call(`/rooms/${code}/state`, { token: owner.token })).view.waitingForNextTrick) {
+          assert.ok(Date.now() - startedWaiting < 4000);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+    }
+    const finished = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+    assert.equal(finished.tableStage, "result");
+    assert.equal(finished.completedTricks.length, 5);
+    assert.equal(finished.players.reduce((sum, player) => sum + player.score, 0),
+      finished.handAwards.reduce((sum, award) => sum + award.points, 0) + finished.finalTrickAward.points);
+    await until(() => watchers.every((watcher) => watcher.messages.at(-1)?.view.tableStage === "result"));
+  } finally { watchers.forEach((watcher) => watcher.socket.close()); }
 });
