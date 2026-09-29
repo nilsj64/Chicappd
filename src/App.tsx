@@ -730,7 +730,6 @@ function Table({
   const firstTrickCard = game.currentTrick[0];
   const leadPlayer = game.players.find((player) => player.id === (firstTrickCard?.playerId ?? game.activePlayerId));
   const firstCardFlying = !!firstTrickCard && flight?.card.id === firstTrickCard.card.id;
-  const [suitNoticeCardId, setSuitNoticeCardId] = useState<string | null>(null);
   const pendingTrick = game.completedTricks.length > reviewedTrickCount;
   const showResult = game.tableStage === "result" && !pendingTrick && !flight;
   const currentCardIds = new Set((game.currentTrick.length
@@ -798,12 +797,6 @@ function Table({
     const timer = window.setTimeout(() => setShowExchangeFeedback(false), 2200);
     return () => window.clearTimeout(timer);
   }, [game.exchangeFeedback?.exchangeCount]);
-  useLayoutEffect(() => {
-    if (!firstTrickCard || firstCardFlying) return;
-    setSuitNoticeCardId(firstTrickCard.card.id);
-    const timer = window.setTimeout(() => setSuitNoticeCardId(null), 1100);
-    return () => window.clearTimeout(timer);
-  }, [firstTrickCard?.card.id, firstCardFlying]);
   const handAction = <button
     className="hand-action"
     onClick={selectionCount ? onExchange : onKeep}
@@ -880,13 +873,10 @@ function Table({
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
                   <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
                 {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
-                  suitNoticeCardId === firstTrickCard.card.id &&
                   <div className="trick-cue trick-suit-cue">Följ färgen om du kan: <strong>{suitName[firstTrickCard.card.suit]}</strong></div>}
-                {(game.tableStage === "result" || reviewingTrick || (playingTricks && game.currentTrick.length > 0 && humanTurn && suitNoticeCardId !== firstTrickCard?.card.id)) && <h2>{playingTricks
+                {(game.tableStage === "result" || reviewingTrick) && <h2>{playingTricks
                   ? reviewingTrick
                     ? flight ? "Kortet spelas…" : `${nextLeader?.name} vann stick ${game.completedTricks.length}`
-                    : game.currentTrick.length
-                    ? `Följ ${suitName[game.currentTrick[0].card.suit]} om du kan`
                     : ""
                   : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är slut"}</h2>}
                 {showResult && <div className="round-summary">
