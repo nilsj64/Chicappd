@@ -16,7 +16,7 @@ import { supportAdvice } from "./support";
 import { API_URL, commandOnline, enterOnline, leaveOnline, loadOnline, savedSession, saveSession, watchOnline } from "./online";
 import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
-import Brand, { StarMark } from "./Brand";
+import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
@@ -91,7 +91,7 @@ function PlayingCard({
 }
 
 function CardBackMark() {
-  return <StarMark className="card-back-mark" />;
+  return <BrandMark className="card-back-mark" />;
 }
 
 function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string }) {
@@ -132,7 +132,7 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
       <header className="landing-header page-width">
         <Brand />
         <span className="header-note">
-          Kortkväll tillsammans, var ni än är <span><Icon name="sparkle" /></span>
+          Kortkväll tillsammans, var ni än är <span><BrandMark /></span>
         </span>
       </header>
       <main className="landing-main page-width">
@@ -164,7 +164,7 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
             </button>}
           </div>
           <div className="hero-footnote">
-            <span className="footnote-icon"><Icon name="sparkle" /></span> {API_URL
+            <span className="footnote-icon"><BrandMark /></span> {API_URL
               ? "Onlinerum för upp till fyra spelare" : "Spela lokalt med upp till tre CPU-spelare"}
           </div>
           <button className="text-button" onClick={onPhysical}>Spela med fysiska kort <Icon name="arrow-right" /></button>
@@ -266,7 +266,7 @@ function Entry({
             }
           }}
         >
-          <div className="form-icon"><Icon name="sparkle" /></div>
+          <div className="form-icon"><BrandMark /></div>
           <div className="form-kicker">
             {joining ? "GÅ MED I RUM" : "SKAPA RUM"}
           </div>
@@ -412,7 +412,7 @@ function Lobby({
             </div>
           </section>
           <aside className="room-panel">
-            <div className="room-panel-icon"><Icon name="sparkle" /></div>
+            <div className="room-panel-icon"><BrandMark /></div>
             <span className="form-kicker">DITT RUM</span>
             <h2>
               {online ? "Dela koden" : "Ditt spel"}
@@ -639,7 +639,7 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
     <aside className="score-panel">
       <div className="score-header">
         <span>POÄNGSTÄLLNING</span>
-        <span><Icon name="sparkle" /></span>
+        <span><BrandMark /></span>
       </div>
       <div className="score-list">
         {players.map((player, index) => (

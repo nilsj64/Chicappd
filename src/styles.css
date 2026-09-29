@@ -1,4 +1,6 @@
 :root {
+  --brand-ink: #183e34;
+  --brand-accent: #e18d70;
   font-family: "DM Sans", sans-serif;
   color: #173b34;
   background: #f7f5ef;
@@ -52,34 +54,39 @@ p {
   font-weight: 600;
   letter-spacing: -1.8px;
   line-height: 1;
-  color: #183e34;
+  color: var(--brand-ink);
 }
+.brand-logo-mark {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: middle;
+}
+.brand-logo-tile { fill: none; }
+.brand-logo-letter { fill: var(--brand-ink); }
+.brand-logo-dot { fill: var(--brand-accent); }
 .brand-mark {
   width: 34px;
   height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #1b4c3e;
-  color: #efe6cb;
+  border-radius: 9px;
+  background: #e7eee5;
   line-height: 1;
 }
 .brand-mark svg {
   width: 23px;
   height: 23px;
-  stroke: currentColor;
-  stroke-width: 8;
-  stroke-linecap: round;
 }
 .brand-dot {
-  color: #e18d70;
+  color: var(--brand-accent);
 }
 .brand-light {
   color: #f8f2e7;
 }
 .brand-light .brand-mark {
   background: #e8d8b8;
-  color: #224b3d;
 }
 .ui-icon, .suit-icon {
   display: inline-block;
@@ -283,7 +290,6 @@ p {
   border-radius: 7px;
 }
 .art-card-back .card-back-mark {
-  color: #d8dbbe;
   width: 98px;
   height: 98px;
 }
@@ -1421,10 +1427,8 @@ p {
   display: block;
   width: 45px;
   height: 45px;
-  stroke: currentColor;
-  stroke-width: 8;
-  stroke-linecap: round;
 }
+.card-back-mark .brand-logo-tile { fill: #e8d8b8; }
 .card-small {
   width: 49px;
   height: 68px;
