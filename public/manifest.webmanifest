@@ -1,0 +1,12 @@
+{
+  "name": "Chicappd",
+  "short_name": "Chicappd",
+  "start_url": "/Chicappd/",
+  "scope": "/Chicappd/",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#173f35",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
