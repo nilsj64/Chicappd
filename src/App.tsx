@@ -661,6 +661,25 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
   );
 }
 
+function ActivityLog({ activity, quiet }: { activity: string[]; quiet: boolean }) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const previous = useRef({ count: 0, height: 0 });
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    if (activity.length > previous.current.count && list.scrollTop > 4)
+      list.scrollTop += list.scrollHeight - previous.current.height;
+    previous.current = { count: activity.length, height: list.scrollHeight };
+  }, [activity]);
+  return <div className={`table-activity ${quiet ? "table-activity-quiet" : ""}`} aria-live="polite">
+    <span>SENASTE HÄNDELSER</span>
+    {activity.length === 0 ? <p>Välj kort att byta eller behåll handen.</p> :
+      <ul ref={listRef}>
+        {activity.map((event, index) => <li key={`${index}-${event}`}>{event}</li>).reverse()}
+      </ul>}
+  </div>;
+}
+
 function Table({
   game,
   viewerId,
@@ -988,18 +1007,8 @@ function Table({
           <div className="table-rule">
             <FinalTrickRule points={game.settings.finalTrickPoints} />
           </div>
-          {(!exchanging || game.activity.length > 0) && <div className={`table-activity ${exchanging ? "table-activity-quiet" : ""}`} aria-live="polite">
-            <span>SENASTE HÄNDELSER</span>
-            {game.activity.length === 0 ? (
-              <p>Välj kort att byta eller behåll handen.</p>
-            ) : (
-              <ul>
-                {game.activity.slice(-8).map((event, index) => (
-                  <li key={`${game.activity.length - 8 + index}-${event}`}>{event}</li>
-                ))}
-              </ul>
-            )}
-          </div>}
+          {(!exchanging || game.activity.length > 0) &&
+            <ActivityLog activity={game.activity} quiet={exchanging} />}
           <div className="table-controls">
             <span>{online ? "ONLINESPEL" : "LOKALT SPEL"}</span>
             <button onClick={onLobby} disabled={online && game.ownerId !== viewerId}>

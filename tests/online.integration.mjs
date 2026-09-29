@@ -72,12 +72,20 @@ test("a mixed online room lets the owner add and remove CPU before playing", asy
   const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
   const code = owner.view.roomCode;
   const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bo" } });
+  const ownerWatcher = watch(code, owner.token);
+  const guestWatcher = watch(code, guest.token);
   try {
+    await until(() => ownerWatcher.messages.length && guestWatcher.messages.length);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
       body: { type: "add-bot" } })).status, 409);
     const added = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "add-bot" } });
     assert.equal(added.status, 200);
+    assert.equal(added.view.phase, "lobby");
+    await until(() => [ownerWatcher, guestWatcher].every((watcher) =>
+      watcher.messages.at(-1)?.view.players.length === 3));
+    assert.deepEqual(guestWatcher.messages.at(-1).view.players.map((player) => player.control),
+      ["human", "human", "bot"]);
     const botId = added.view.players[2].id;
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
       body: { type: "remove-bot", playerId: botId } })).status, 409);
@@ -85,6 +93,12 @@ test("a mixed online room lets the owner add and remove CPU before playing", asy
       body: { type: "remove-bot", playerId: botId } })).status, 200);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "add-bot" } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "add-bot" } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "add-bot" } })).status, 409);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "remove-bot", playerId: added.view.players[2].id } })).status, 200);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "start-round" } })).status, 200);
     for (let exchange = 0; exchange < 3; exchange++) {
@@ -97,6 +111,8 @@ test("a mixed online room lets the owner add and remove CPU before playing", asy
     assert.deepEqual(finished.players.map((player) => player.control), ["human", "human", "bot"]);
     assert.equal(finished.completedTricks.length, 5);
   } finally {
+    ownerWatcher.socket.close();
+    guestWatcher.socket.close();
     await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token });
     await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token });
   }
@@ -136,6 +152,28 @@ test("leaving during a submitted exchange removes the player and resets the room
     assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token })).status, 200);
     assert.equal((await call(`/rooms/${code}/state`, { token: owner.token })).status, 404);
   } finally { watcher.socket.close(); }
+});
+
+test("leaving the lobby transfers ownership and updates the remaining client", async () => {
+  const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
+  const code = owner.view.roomCode;
+  const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bo" } });
+  const watcher = watch(code, guest.token);
+  try {
+    await until(() => watcher.messages.length > 0);
+    assert.equal((await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token })).status, 200);
+    assert.equal((await call(`/rooms/${code}/state`, { token: owner.token })).status, 401);
+    await until(() => watcher.messages.at(-1)?.view.players.length === 1);
+    const lobby = watcher.messages.at(-1).view;
+    assert.equal(lobby.phase, "lobby");
+    assert.equal(lobby.ownerId, guest.playerId);
+    assert.deepEqual(lobby.players.map((player) => player.id), [guest.playerId]);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "add-bot" } })).status, 200);
+  } finally {
+    watcher.socket.close();
+    await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token });
+  }
 });
 
 test("two real room clients complete a round with private hands and live updates", async () => {

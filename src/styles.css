@@ -1670,6 +1670,7 @@ p {
   margin: 10px 0 0;
   max-height: 180px;
   overflow-y: auto;
+  overflow-anchor: none;
 }
 .table-activity li,
 .table-activity p {
