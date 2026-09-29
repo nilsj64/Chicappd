@@ -1,5 +1,5 @@
 import type { Card, GameView } from "./game.ts";
-import { finalTrickPoints, suitSymbol } from "./game.ts";
+import { finalTrickPoints, suitName } from "./game.ts";
 import { chooseBotDiscards } from "./bot.ts";
 import { evaluateHand } from "./poker.ts";
 import { cardValue, legalCards, trickWinner } from "./tricks.ts";
@@ -8,7 +8,7 @@ export type SupportTip = { cardIds: string[]; text: string };
 export type SupportAdvice = { context: string; tips: SupportTip[] };
 
 function cardsText(cards: readonly Card[]): string {
-  return cards.map((card) => `${card.rank}${suitSymbol[card.suit]}`).join(", ");
+  return cards.map((card) => `${card.rank} i ${suitName[card.suit]}`).join(", ");
 }
 
 /** Uses only the same projected information the player sees at the table. */
@@ -43,7 +43,7 @@ export function supportAdvice(view: GameView, viewerId: string): SupportAdvice {
 
   const last = view.completedTricks.length === 4;
   const led = view.currentTrick[0]?.card.suit ?? null;
-  const context = `${last ? `Sista sticket ger ${finalTrickPoints(view.settings)} poäng. ` : "De första fyra sticken ger inga poäng. "}${led ? `Du måste följa ${suitSymbol[led]} om du kan. Bara kort i den färgen kan vinna sticket.` : "Den som spelar ut bestämmer färg. Högsta kortet i den färgen vinner."}`;
+  const context = `${last ? `Sista sticket ger ${finalTrickPoints(view.settings)} poäng. ` : "De första fyra sticken ger inga poäng. "}${led ? `Du måste följa ${suitName[led]} om du kan. Bara kort i den färgen kan vinna sticket.` : "Den som spelar ut bestämmer färg. Högsta kortet i den färgen vinner."}`;
   if (view.waitingForNextTrick || view.activePlayerId !== viewerId || !player.hand.length)
     return { context, tips: [{ cardIds: [], text: "Vänta på din tur. Den som vinner sticket spelar ut i nästa." }] };
 

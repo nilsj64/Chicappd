@@ -26,6 +26,82 @@ async function until(predicate, timeout = 3000) {
   }
 }
 
+async function finishRoomWithBots(code, seats) {
+  const byId = new Map(seats.map((seat) => [seat.playerId, seat]));
+  for (let turn = 0; turn < 150; turn++) {
+    const state = (await call(`/rooms/${code}/state`, { token: seats[0].token })).view;
+    if (state.tableStage === "result") return state;
+    if (state.waitingForNextTrick) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      continue;
+    }
+    const actor = byId.get(state.activePlayerId);
+    assert.ok(actor, "the Worker must complete CPU turns before waiting for a human");
+    const view = (await call(`/rooms/${code}/state`, { token: actor.token })).view;
+    const hand = view.players.find((player) => player.id === actor.playerId).hand;
+    const card = legalCards(hand, view.currentTrick[0]?.card.suit ?? null)[0];
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: actor.token,
+      body: { type: "play-card", cardId: card.id } })).status, 200);
+  }
+  throw new Error("Room with bots did not finish five tricks");
+}
+
+test("an online room with one human and CPU players completes a round", async () => {
+  const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
+  const code = owner.view.roomCode;
+  try {
+    for (let i = 0; i < 3; i++)
+      assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+        body: { type: "add-bot" } })).status, 200);
+    let view = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+    assert.deepEqual(view.players.map((player) => player.control), ["human", "bot", "bot", "bot"]);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "start-round" } })).status, 200);
+    for (let exchange = 0; exchange < 3; exchange++) {
+      view = (await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+        body: { type: "exchange", discardIds: [] } })).view;
+      assert.equal(view.exchangeCount, exchange + 1);
+    }
+    const finished = await finishRoomWithBots(code, [owner]);
+    assert.equal(finished.completedTricks.length, 5);
+    assert.equal(finished.players.length, 4);
+  } finally { await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token }); }
+});
+
+test("a mixed online room lets the owner add and remove CPU before playing", async () => {
+  const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
+  const code = owner.view.roomCode;
+  const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bo" } });
+  try {
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "add-bot" } })).status, 409);
+    const added = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "add-bot" } });
+    assert.equal(added.status, 200);
+    const botId = added.view.players[2].id;
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "remove-bot", playerId: botId } })).status, 409);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "remove-bot", playerId: botId } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "add-bot" } })).status, 200);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "start-round" } })).status, 200);
+    for (let exchange = 0; exchange < 3; exchange++) {
+      assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+        body: { type: "exchange", discardIds: [] } })).status, 200);
+      assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+        body: { type: "exchange", discardIds: [] } })).status, 200);
+    }
+    const finished = await finishRoomWithBots(code, [owner, guest]);
+    assert.deepEqual(finished.players.map((player) => player.control), ["human", "human", "bot"]);
+    assert.equal(finished.completedTricks.length, 5);
+  } finally {
+    await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token });
+    await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token });
+  }
+});
+
 test("leaving during a submitted exchange removes the player and resets the room", async () => {
   const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
   const code = owner.view.roomCode;
@@ -35,7 +111,7 @@ test("leaving during a submitted exchange removes the player and resets the room
     await until(() => watcher.messages.length > 0);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "start-round" } })).status, 200);
-    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "exchange", discardIds: [] } })).status, 200);
     const returned = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "return-lobby" } });
@@ -137,7 +213,18 @@ test("two real room clients complete a round with private hands and live updates
     assert.equal(next.status, 200);
     assert.equal(next.view.tableStage, "exchange");
     assert.equal(next.view.exchangeCount, 0);
+    assert.equal(next.view.roundStarterId, b.playerId);
+    assert.equal(next.view.activePlayerId, b.playerId);
     assert.deepEqual(next.view.players.map((p) => p.score), av.players.map((p) => p.score));
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: a.token,
+      body: { type: "exchange", discardIds: [] } })).status, 409);
+    const secondRoundExchange = await call(`/rooms/${code}/command`, { method: "POST", token: b.token,
+      body: { type: "exchange", discardIds: [] } });
+    assert.equal(secondRoundExchange.status, 200);
+    assert.deepEqual(secondRoundExchange.view.exchangeEvents.map((event) => event.playerId), [b.playerId]);
+    assert.equal(secondRoundExchange.view.activePlayerId, a.playerId);
+    assert.deepEqual((await call(`/rooms/${code}/state`, { token: a.token })).view.exchangeEvents,
+      secondRoundExchange.view.exchangeEvents);
     const resumed = watch(code, a.token);
     try {
       await until(() => resumed.messages.some((m) => m.view.tableStage === "exchange"));

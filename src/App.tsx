@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { evaluateHand, showdownHandLabel } from "./poker";
-import type { Card, GameSettings, GameState, GameView, PlayerView } from "./game";
+import type { Card, ExchangeEvent, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
   createRoom,
   randomRoomCode,
-  suitSymbol,
+  suitName,
   playedCardsForPlayer,
   viewForPlayer,
 } from "./game";
@@ -17,14 +17,12 @@ import { API_URL, commandOnline, enterOnline, leaveOnline, loadOnline, savedSess
 import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { StarMark } from "./Brand";
+import { Icon, SuitIcon } from "./Icon";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
 const BOT_PAUSE_MS = 290;
 const TRICK_REVIEW_MS = 1300;
-const suitName: Record<Card["suit"], string> = {
-  spades: "spader", hearts: "hjärter", diamonds: "ruter", clubs: "klöver",
-};
 const rankName: Partial<Record<Card["rank"], string>> = {
   J: "knekt", Q: "dam", K: "kung", A: "ess",
 };
@@ -34,11 +32,10 @@ function cardOrigin(selector: string): CardFlight["from"] | null {
   return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
 }
 
-type EntryMode = "create" | "join" | "practice" | null;
+type EntryMode = "create" | "join" | null;
 type RoomEntry =
   | { kind: "create" }
-  | { kind: "join"; code: string }
-  | { kind: "practice" };
+  | { kind: "join"; code: string };
 
 function FinalTrickRule({ points }: { points: 2 | 5 }) {
   return <span>Sista sticket: {points} p</span>;
@@ -82,12 +79,12 @@ function PlayingCard({
     >
       <span className="card-corner">
         <b>{card.rank}</b>
-        <span>{suitSymbol[card.suit]}</span>
+        <SuitIcon suit={card.suit} />
       </span>
-      <span className="card-center">{suitSymbol[card.suit]}</span>
+      <span className="card-center"><SuitIcon suit={card.suit} /></span>
       <span className="card-corner card-corner-bottom">
         <b>{card.rank}</b>
-        <span>{suitSymbol[card.suit]}</span>
+        <SuitIcon suit={card.suit} />
       </span>
     </button>
   );
@@ -135,7 +132,7 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
       <header className="landing-header page-width">
         <Brand />
         <span className="header-note">
-          Kortkväll tillsammans, var ni än är <span>✳</span>
+          Kortkväll tillsammans, var ni än är <span><Icon name="sparkle" /></span>
         </span>
       </header>
       <main className="landing-main page-width">
@@ -157,20 +154,20 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
               className="button button-primary"
               onClick={() => onEnter("create")}
             >
-              Skapa spel <span aria-hidden="true">↗</span>
+              Skapa spel <Icon name="arrow-up-right" />
             </button>
-            <button
+            {API_URL && <button
               className="button button-secondary"
               onClick={() => onEnter("join")}
             >
-              Gå med i spel <span aria-hidden="true">→</span>
-            </button>
+              Gå med i spel <Icon name="arrow-right" />
+            </button>}
           </div>
           <div className="hero-footnote">
-            <span className="footnote-icon">✦</span> Onlinerum för upp till fyra spelare
+            <span className="footnote-icon"><Icon name="sparkle" /></span> {API_URL
+              ? "Onlinerum för upp till fyra spelare" : "Spela lokalt med upp till tre CPU-spelare"}
           </div>
-          <button className="text-button" onClick={() => onEnter("practice")}>Spela lokalt mot datorn →</button>
-          <button className="text-button" onClick={onPhysical}>Spela med fysiska kort →</button>
+          <button className="text-button" onClick={onPhysical}>Spela med fysiska kort <Icon name="arrow-right" /></button>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="art-ring art-ring-one" />
@@ -181,23 +178,24 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
           </div>
           <div className="art-card art-card-heart">
             <span className="art-corner">
-              A<br />♥
+              A<br /><SuitIcon suit="hearts" />
             </span>
-            <span className="art-suit">♥</span>
+            <span className="art-suit"><SuitIcon suit="hearts" /></span>
           </div>
           <div className="art-card art-card-spade">
             <span className="art-corner">
-              K<br />♠
+              K<br /><SuitIcon suit="spades" />
             </span>
-            <span className="art-suit">♠</span>
+            <span className="art-suit"><SuitIcon suit="spades" /></span>
           </div>
           <div className="art-label art-label-bottom">
-            KORTKVÄLLEN BÖRJAR HÄR <span>↗</span>
+            KORTKVÄLLEN BÖRJAR HÄR <span><Icon name="arrow-up-right" /></span>
           </div>
         </div>
       </main>
       <footer className="landing-footer page-width">
-        <span>♠ ♥ ♦ ♣</span>
+        <span className="suit-row"><SuitIcon suit="spades" /><SuitIcon suit="hearts" />
+          <SuitIcon suit="diamonds" /><SuitIcon suit="clubs" /></span>
         <span>För spelkvällar tillsammans.</span>
       </footer>
     </div>
@@ -218,13 +216,12 @@ function Entry({
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const joining = mode === "join";
-  const practicing = mode === "practice";
   return (
     <div className="entry-page">
       <header className="page-width inner-header">
         <Brand />
         <button className="text-button" onClick={onBack}>
-          ← Tillbaka
+          <Icon name="arrow-left" /> Tillbaka
         </button>
       </header>
       <main className="entry-layout page-width">
@@ -250,12 +247,10 @@ function Entry({
           <p>
             {joining
               ? "Skriv in koden du fick av den som skapade rummet."
-              : practicing ? "Spela en övningsrunda mot datorn på den här enheten."
-              : "Skapa ett privat rum och dela koden med din medspelare."}
+              : "Skapa ett rum och bjud in vänner eller lägg till datorstyrda spelare."}
           </p>
-          <div className="entry-deco">
-            ♣ <span>♦</span> ♠ <span>♥</span>
-          </div>
+          <div className="entry-deco suit-row"><SuitIcon suit="clubs" /><SuitIcon suit="diamonds" />
+            <SuitIcon suit="spades" /><SuitIcon suit="hearts" /></div>
         </div>
         <form
           className="entry-card"
@@ -267,15 +262,15 @@ function Entry({
                 code: code.trim().toUpperCase(),
               });
             } else {
-              onSubmit(name.trim() || "Du", { kind: practicing ? "practice" : "create" });
+              onSubmit(name.trim() || "Du", { kind: "create" });
             }
           }}
         >
-          <div className="form-icon">✳</div>
+          <div className="form-icon"><Icon name="sparkle" /></div>
           <div className="form-kicker">
-            {joining ? "GÅ MED I RUM" : practicing ? "LOKAL ÖVNING" : "SKAPA RUM"}
+            {joining ? "GÅ MED I RUM" : "SKAPA RUM"}
           </div>
-          <h2>{joining ? "Gå med i ett rum" : practicing ? "Spela mot datorn" : "Skapa ett rum"}</h2>
+          <h2>{joining ? "Gå med i ett rum" : "Skapa ett rum"}</h2>
           <label htmlFor="player-name">Vad heter du?</label>
           <input
             id="player-name"
@@ -308,17 +303,19 @@ function Entry({
             className="button button-primary form-submit"
             type="submit" disabled={busy}
           >
-            {joining ? "Gå med i rummet" : practicing ? "Starta lokal övning" : "Skapa rummet"} <span>↗</span>
+            {joining ? "Gå med i rummet" : "Skapa rummet"} <Icon name="arrow-up-right" />
           </button>
           {error && <p className="form-note" role="alert">{error}</p>}
-          <p className="form-note">{practicing || !API_URL ? "Lokal övning" : "Spela tillsammans online"}</p>
+          <p className="form-note">{API_URL ? "Spela tillsammans online" : "Spela lokalt med datorstyrda spelare"}</p>
         </form>
       </main>
     </div>
   );
 }
 
-function Seat({ player, index, viewerId }: { player?: PlayerView; index: number; viewerId: string }) {
+function Seat({ player, index, viewerId, onRemoveBot }: {
+  player?: PlayerView; index: number; viewerId: string; onRemoveBot?: (id: string) => void;
+}) {
   return (
     <div className={`lobby-seat ${player ? "seat-filled" : ""}`}>
       <span className="seat-index">0{index + 1}</span>
@@ -329,10 +326,12 @@ function Seat({ player, index, viewerId }: { player?: PlayerView; index: number;
           <div className="seat-detail">
             {player.id === viewerId ? "Du" : player.control === "bot" ? "Datorspelare" : "Spelare"}
           </div>
+          {player.control === "bot" && onRemoveBot && <button type="button" className="seat-remove"
+            onClick={() => onRemoveBot(player.id)} aria-label={`Ta bort ${player.name}`}>Ta bort</button>}
         </>
       ) : (
         <>
-          <span className="empty-avatar">+</span>
+          <span className="empty-avatar"><Icon name="plus" /></span>
           <div className="seat-name">Ledig plats</div>
           <div className="seat-detail">Ingen sitter här än</div>
         </>
@@ -344,7 +343,8 @@ function Seat({ player, index, viewerId }: { player?: PlayerView; index: number;
 function Lobby({
   game,
   viewerId,
-  onAddDemo,
+  onAddBot,
+  onRemoveBot,
   onSettings,
   onStart,
   onLeave, online,
@@ -352,7 +352,8 @@ function Lobby({
   game: GameView;
   viewerId: string;
   online: boolean;
-  onAddDemo: () => void;
+  onAddBot: () => void;
+  onRemoveBot: (id: string) => void;
   onSettings: (settings: GameSettings) => void;
   onStart: () => void;
   onLeave: () => void;
@@ -372,7 +373,7 @@ function Lobby({
       <header className="page-width inner-header">
         <Brand />
         <button className="text-button" onClick={onLeave}>
-          Lämna rum ↗
+          Lämna rum <Icon name="arrow-up-right" />
         </button>
       </header>
       <main className="lobby-main page-width">
@@ -383,7 +384,7 @@ function Lobby({
           <h1>
             Välkommen till <em>bordet.</em>
           </h1>
-          <p>{online ? "Dela rumskoden med upp till tre vänner. Ägaren kan starta när minst två spelare är här." : "Lägg till en datorspelare för lokal övning."}</p>
+          <p>{online ? "Dela rumskoden med vänner eller lägg till datorstyrda spelare. Ägaren startar när minst två spelare är här." : "Lägg till datorstyrda spelare och starta när ni är minst två."}</p>
         </div>
         <div className="lobby-content">
           <section className="lobby-panel">
@@ -393,42 +394,38 @@ function Lobby({
             </div>
             <div className="seats-grid">
               {Array.from({ length: 4 }, (_, index) => (
-                <Seat key={index} player={game.players[index]} index={index} viewerId={viewerId} />
+                <Seat key={index} player={game.players[index]} index={index} viewerId={viewerId}
+                  onRemoveBot={game.ownerId === viewerId ? onRemoveBot : undefined} />
               ))}
             </div>
             <div className="lobby-panel-bottom">
               <span>
-                <span className="status-dot" /> {online ? "Onlinespel" : "Lokal övning"}
+                <span className="status-dot" /> {online ? "Onlinerum" : "Lokalt rum"}
               </span>
-              {!online && <button
+              <button
                 className="small-button"
-                onClick={onAddDemo}
+                onClick={onAddBot}
                 disabled={game.players.length >= 4 || game.ownerId !== viewerId}
               >
-                + Lägg till datorspelare
-              </button>}
+                <Icon name="plus" /> Lägg till datorspelare
+              </button>
             </div>
           </section>
           <aside className="room-panel">
-            <div className="room-panel-icon">✳</div>
-            <span className="form-kicker">DITT PRIVATA RUM</span>
+            <div className="room-panel-icon"><Icon name="sparkle" /></div>
+            <span className="form-kicker">DITT RUM</span>
             <h2>
-              Dela koden
+              {online ? "Dela koden" : "Ditt spel"}
               <br />
-              med vännerna.
+              {online ? "med vännerna." : "börjar här."}
             </h2>
-            <div className="room-code-label">RUMSKOD</div>
-            <button
-              className="room-code"
-              onClick={copyCode}
-              title="Kopiera rumskod"
-            >
-              <span>{game.roomCode}</span>
-              <span className="copy-icon">{copied ? "✓" : "⧉"}</span>
-            </button>
-            <p>
-              {copied ? "Koden är kopierad!" : "Tryck på koden för att kopiera den."}
-            </p>
+            {online ? <><div className="room-code-label">RUMSKOD</div>
+              <button className="room-code" onClick={copyCode} title="Kopiera rumskod">
+                <span>{game.roomCode}</span>
+                <span className="copy-icon"><Icon name={copied ? "check" : "copy"} /></span>
+              </button>
+              <p>{copied ? "Koden är kopierad!" : "Tryck på koden för att kopiera den."}</p></>
+              : <p>Lägg till datorstyrda spelare och välj regler innan ni börjar.</p>}
             <div className="room-rule">
               <span className="room-code-label">POÄNGREGEL</span>
               <label>Sista sticket
@@ -449,12 +446,12 @@ function Lobby({
               onClick={onStart}
               disabled={game.players.length < 2 || game.ownerId !== viewerId}
             >
-              Börja spela <span>→</span>
+              Börja spela <Icon name="arrow-right" />
             </button>
             <small>
               {game.players.length < 2
-                ? online ? "Vänta på minst en spelare till." : "Lägg till minst en datorspelare för att börja."
-                : online ? "Starta matchen med fem kort var." : "Starta en övningsrunda med fem kort var."}
+                ? "Bjud in en vän eller lägg till en datorstyrd spelare."
+                : "Starta matchen med fem kort var."}
             </small>
           </aside>
         </div>
@@ -467,7 +464,6 @@ function Opponent({
   player,
   viewerId,
   active,
-  announcement,
   position,
   playedCards,
   showPlayedCards,
@@ -478,7 +474,6 @@ function Opponent({
   player: PlayerView;
   viewerId: string;
   active: boolean;
-  announcement?: string;
   position: "top" | "left" | "right";
   playedCards: Card[];
   showPlayedCards: boolean;
@@ -497,10 +492,9 @@ function Opponent({
         <Avatar player={player} viewerId={viewerId} size="small" />
         <span>
           <strong className="table-player-name">{player.name} <span className="table-player-score">{player.score} p</span></strong>
-          <small>{active ? "Spelar nu" : "Vid bordet"}</small>
+          {active && <small>Spelar nu</small>}
         </span>
       </div>
-      {announcement && <div className="opponent-announcement">{announcement}</div>}
       {showPlayedCards && <PlayedStack cards={playedCards} player={player}
         currentCardIds={currentCardIds} flight={flight} onCardLanded={onCardLanded} />}
     </div>
@@ -538,6 +532,36 @@ function DeckPile({ count }: { count: number }) {
         <CardBack small />
       </div>;
     })}
+  </div>;
+}
+
+function ExchangeFlight({ event, playerName, own }: {
+  event: ExchangeEvent; playerName: string; own: boolean;
+}) {
+  const [cards, setCards] = useState<CSSProperties[]>([]);
+  useLayoutEffect(() => {
+    const source = document.querySelector(own ? ".your-hand .playing-card" :
+      `[data-player-id="${CSS.escape(event.playerId)}"] .opponent-cards .card-back`);
+    const target = document.querySelector(".discard-pile");
+    if (!source || !target) return;
+    const from = source.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    setCards(Array.from({ length: event.changedCards }, (_, index) => ({
+      left: from.left + (index - (event.changedCards - 1) / 2) * 8,
+      top: from.top,
+      width: from.width,
+      height: from.height,
+      "--exchange-x": `${to.left + to.width / 2 - from.left - from.width / 2}px`,
+      "--exchange-y": `${to.top + to.height / 2 - from.top - from.height / 2}px`,
+      animationDelay: `${index * 65}ms`,
+    } as CSSProperties)));
+  }, [event.id, event.changedCards, event.playerId, own]);
+  return <div className="exchange-playback" aria-live="polite">
+    {cards.map((style, index) => <div className="exchange-flight-card" style={style} key={index} aria-hidden="true">
+      <CardBack small />
+    </div>)}
+    <div className="exchange-playback-label">{playerName} {event.changedCards
+      ? `byter ${event.changedCards} kort` : "behåller handen"}</div>
   </div>;
 }
 
@@ -615,7 +639,7 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
     <aside className="score-panel">
       <div className="score-header">
         <span>POÄNGSTÄLLNING</span>
-        <span>✳</span>
+        <span><Icon name="sparkle" /></span>
       </div>
       <div className="score-list">
         {players.map((player, index) => (
@@ -678,6 +702,7 @@ function Table({
   const advice = supportOpen ? supportAdvice(game, viewerId) : null;
   const opponents = game.players.filter((player) => player.id !== viewerId);
   const exchanging = game.tableStage === "exchange";
+  const yourExchangeTurn = exchanging && game.activePlayerId === local.id;
   const playingTricks = game.tableStage === "tricks";
   const reviewingTrick = playingTricks && game.waitingForNextTrick;
   const humanTurn = playingTricks && game.activePlayerId === local.id && !reviewingTrick && !flight;
@@ -688,6 +713,7 @@ function Table({
   const firstCardFlying = !!firstTrickCard && flight?.card.id === firstTrickCard.card.id;
   const [suitNoticeCardId, setSuitNoticeCardId] = useState<string | null>(null);
   const pendingTrick = game.completedTricks.length > reviewedTrickCount;
+  const showResult = game.tableStage === "result" && !pendingTrick && !flight;
   const currentCardIds = new Set((game.currentTrick.length
     ? game.currentTrick : pendingTrick ? lastTrick?.cards ?? [] : []).map((played) => played.card.id));
   const selectionCount = selectedCardIds.length;
@@ -700,6 +726,21 @@ function Table({
   const canDeclareChicago = playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
     !game.chicagoPlayerId && local.score >= 15;
   const [showExchangeFeedback, setShowExchangeFeedback] = useState(false);
+  const seenExchangeEvent = useRef(0);
+  const [exchangeQueue, setExchangeQueue] = useState<ExchangeEvent[]>([]);
+  useEffect(() => {
+    const fresh = game.exchangeEvents.filter((event) => event.id > seenExchangeEvent.current);
+    if (!fresh.length) return;
+    seenExchangeEvent.current = fresh.at(-1)!.id;
+    setExchangeQueue((queue) => [...queue, ...fresh]);
+  }, [game.exchangeEvents]);
+  useEffect(() => {
+    if (!exchangeQueue.length) return;
+    const timer = window.setTimeout(() => setExchangeQueue((queue) => queue.slice(1)),
+      exchangeQueue[0].changedCards ? 620 + 65 * (exchangeQueue[0].changedCards - 1) : 450);
+    return () => window.clearTimeout(timer);
+  }, [exchangeQueue]);
+  const exchangePlayback = exchangeQueue[0];
   const dragRef = useRef<{ id: string; pointerId: number; x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef<string | null>(null);
   function finishDrag(event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) {
@@ -747,11 +788,11 @@ function Table({
   const handAction = <button
     className="hand-action"
     onClick={selectionCount ? onExchange : onKeep}
-    disabled={exchangeBusy}
+    disabled={exchangeBusy || !!exchangePlayback || !yourExchangeTurn}
   >
     {selectionCount ? `Byt ${selectionCount} kort`
       : "Behåll handen"}
-    <span aria-hidden="true">→</span>
+    <Icon name="arrow-right" />
   </button>;
   const legalTrickIds = new Set(playingTricks
     ? legalCards(local.hand, game.currentTrick[0]?.card.suit ?? null).map((card) => card.id)
@@ -764,16 +805,16 @@ function Table({
           <span className="table-room">RUM {game.roomCode}</span>
           <span className="table-header-divider" />
           <span>
-            <span className="live-dot" /> {online ? "Onlinespel" : "Övningsspel"}
+            <span className="live-dot" /> {online ? "Onlinespel" : "Lokalt spel"}
           </span>
         </div>
         <button className="table-exit" onClick={onLeave}>
-          Lämna spelet <span>↗</span>
+          Lämna spelet <Icon name="arrow-up-right" />
         </button>
       </header>
       <main className="table-layout">
         <section className="felt-wrap">
-          <div className={`felt ${exchanging ? "" : "felt-tricks"} ${game.tableStage === "result" && !pendingTrick && !flight ? "felt-result" : ""}`}>
+          <div className={`felt ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
             {exchanging && <div className="exchange-round">Kortbyte {game.exchangeCount + 1} av 3</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
@@ -781,6 +822,9 @@ function Table({
                 ? "du behöll handen"
                 : `du bytte ${game.exchangeFeedback.changedCards} kort`}
             </div>}
+            {exchangePlayback && <ExchangeFlight key={exchangePlayback.id} event={exchangePlayback}
+              playerName={game.players.find((player) => player.id === exchangePlayback.playerId)?.name ?? "Spelare"}
+              own={exchangePlayback.playerId === viewerId} />}
             <div className="opponents">
               {opponents.map((player, index) => (
                 <Opponent
@@ -792,14 +836,10 @@ function Table({
                     ? index === 0 ? "left" : "right"
                     : ["left", "top", "right"][index] as "left" | "top" | "right"}
                   playedCards={playedCardsForPlayer(game, player.id)}
-                  showPlayedCards={!exchanging}
+                  showPlayedCards={!exchanging && !showResult}
                   currentCardIds={currentCardIds}
                   flight={flight}
                   onCardLanded={onCardLanded}
-                  announcement={game.tableStage === "result" && !flight
-                    ? finalAward?.evaluations[player.id]
-                      ? showdownHandLabel(finalAward.evaluations[player.id], showdownEvaluations) : undefined
-                    : undefined}
                 />
               ))}
             </div>
@@ -813,7 +853,7 @@ function Table({
                 </div>
               </div>
               </> : <div className="trick-view" aria-live="polite">
-                <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>
+                {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
                   Chicago: <strong>{chicagoPlayer.name}</strong> satsar på alla stick
                   {chicagoBreaker && <small>Bruten av {chicagoBreaker.name} · +10 p</small>}
@@ -822,26 +862,29 @@ function Table({
                   <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
                 {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
                   suitNoticeCardId === firstTrickCard.card.id &&
-                  <div className="trick-cue trick-suit-cue">Följ färgen om du kan: <strong>{suitSymbol[firstTrickCard.card.suit]}</strong></div>}
+                  <div className="trick-cue trick-suit-cue">Följ färgen om du kan: <strong>{suitName[firstTrickCard.card.suit]}</strong></div>}
                 {(game.tableStage === "result" || reviewingTrick || (playingTricks && game.currentTrick.length > 0 && humanTurn && suitNoticeCardId !== firstTrickCard?.card.id)) && <h2>{playingTricks
                   ? reviewingTrick
                     ? flight ? "Kortet spelas…" : `${nextLeader?.name} vann stick ${game.completedTricks.length}`
                     : game.currentTrick.length
-                    ? `Följ ${suitSymbol[game.currentTrick[0].card.suit]} om du kan`
+                    ? `Följ ${suitName[game.currentTrick[0].card.suit]} om du kan`
                     : ""
                   : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är slut"}</h2>}
-                {game.tableStage === "result" && !pendingTrick && !flight && <div className="round-summary">
-                  <div><span>SISTA STICKET</span><strong>{finalTrickWinner?.name} · +{game.finalTrickAward?.points ?? 0} p</strong></div>
-                  {game.chicagoAward && <div><span>CHICAGO</span><strong>{chicagoPlayer?.name} · {game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} p</strong></div>}
-                  <div><span>BÄSTA HANDEN VID RUNDANS SLUT</span><strong>{finalAward?.winnerId
-                    ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${showdownHandLabel(finalAward.evaluations[finalAward.winnerId], showdownEvaluations)} · +${finalAward.points} p`
-                    : "Ingen fick poäng för handen · 0 p"}</strong></div>
-                  <div className="round-hands"><span>HÄNDER VID RUNDANS SLUT</span>{game.players.map((player) => <small key={player.id}>
-                    {player.name}: {finalAward?.evaluations[player.id]
-                      ? showdownHandLabel(finalAward.evaluations[player.id], showdownEvaluations) : ""}
-                  </small>)}</div>
+                {showResult && <div className="round-summary">
+                  <div className="round-awards">
+                    <div><span>Sista sticket</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} p</b></strong></div>
+                    <div><span>Bästa handen</span><strong>{finalAward?.winnerId
+                      ? game.players.find((player) => player.id === finalAward.winnerId)?.name : "Ingen"}
+                      <b>+{finalAward?.points ?? 0} p</b></strong></div>
+                    {game.chicagoAward && <div><span>Chicago</span><strong>{chicagoPlayer?.name}
+                      <b>{game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} p</b></strong></div>}
+                  </div>
+                  <div className="round-hands"><h3>Händer vid rundans slut</h3><ul>{game.players.map((player) => <li key={player.id}>
+                    <span>{player.name}</span><span>{finalAward?.evaluations[player.id]
+                      ? showdownHandLabel(finalAward.evaluations[player.id], showdownEvaluations).replace(" – ", ", ") : ""}</span>
+                  </li>)}</ul></div>
                   <button className="button button-next-round" onClick={onNextRound}>
-                    Spela en runda till <span aria-hidden="true">→</span>
+                    Spela en runda till <Icon name="arrow-right" />
                   </button>
                 </div>}
               </div>}
@@ -854,17 +897,16 @@ function Table({
                   <strong>
                     {local.name} <em>DU</em> <span className="table-player-score">{local.score} p</span>
                   </strong>
-                  <small>
-                    {exchanging ? "Välj kort att byta eller behåll handen"
-                      : game.tableStage === "result"
-                      ? "Alla fem stick spelade"
+                  {game.tableStage !== "result" && <small>
+                    {exchanging ? yourExchangeTurn ? "Välj kort att byta eller behåll handen"
+                      : `${nextLeader?.name ?? "Nästa spelare"} byter först…`
                       : reviewingTrick ? "Nästa stick börjar snart"
                       : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} spelar…`
                       : "Tryck på ett kort eller dra det till bordet"}
-                  </small>
+                  </small>}
                 </span>
               </div>
-              {!exchanging && <PlayedStack cards={playedCardsForPlayer(game, local.id)} player={local}
+              {!exchanging && !showResult && <PlayedStack cards={playedCardsForPlayer(game, local.id)} player={local}
                 currentCardIds={currentCardIds} flight={flight} onCardLanded={onCardLanded} />}
               <div className="your-hand">
                 {local.hand.map((card) => (
@@ -872,9 +914,11 @@ function Table({
                     key={card.id}
                     card={card}
                     selected={exchanging && selectedCardIds.includes(card.id)}
-                    unavailable={playingTricks && (!humanTurn || !legalTrickIds.has(card.id))}
+                    unavailable={(exchanging && !yourExchangeTurn) ||
+                      (playingTricks && (!humanTurn || !legalTrickIds.has(card.id)))}
                     onClick={
-                      game.tableStage === "result" || exchangeBusy || (playingTricks && !humanTurn) ? undefined
+                      game.tableStage === "result" || exchangeBusy || !!exchangePlayback ||
+                      (exchanging && !yourExchangeTurn) || (playingTricks && !humanTurn) ? undefined
                         : playingTricks ? () => {
                           if (suppressClickRef.current === card.id) { suppressClickRef.current = null; return; }
                           onPlayTrickCard(card.id);
@@ -924,7 +968,7 @@ function Table({
           </div>
           <button type="button" className="support-toggle" aria-expanded={supportOpen}
             aria-controls="support-sheet" onClick={() => setSupportOpen((open) => !open)}>
-            <span>Tips och regler</span><span>{supportOpen ? "Dölj −" : "Visa +"}</span>
+            <span>Tips och regler</span><span>{supportOpen ? "Dölj" : "Visa"} <Icon name={supportOpen ? "minus" : "plus"} /></span>
           </button>
           {supportOpen && advice && <section id="support-sheet" className="support-sheet" aria-label="Tips och regler" aria-live="polite">
             <p>{advice.context}</p>
@@ -957,13 +1001,13 @@ function Table({
             )}
           </div>}
           <div className="table-controls">
-            <span>{online ? "ONLINESPEL" : "LOKAL ÖVNING"}</span>
+            <span>{online ? "ONLINESPEL" : "LOKALT SPEL"}</span>
             <button onClick={onLobby} disabled={online && game.ownerId !== viewerId}>
-              ← <span>Till väntrummet</span>
+              <Icon name="arrow-left" /> <span>Till väntrummet</span>
             </button>
           </div>
           <div className="sidebar-bottom">
-            Spela tillsammans. <span>♥</span>
+            Spela tillsammans. <span><Icon name="heart" /></span>
           </div>
         </aside>
       </main>
@@ -1108,9 +1152,9 @@ export default function App() {
     setSelectedCardIds([]);
     setError(null);
     try {
-      if (!API_URL && entry.kind !== "practice")
-        throw new Error("Onlinespel är inte konfigurerat ännu. Välj lokal övning under tiden.");
-      if (API_URL && entry.kind !== "practice") {
+      if (!API_URL && entry.kind === "join")
+        throw new Error("Onlinespel är inte konfigurerat ännu. Du kan skapa ett lokalt rum med datorstyrda spelare.");
+      if (API_URL) {
         const result = await enterOnline(name, entry.kind === "join" ? entry.code : undefined);
         setViewerId(result.session.playerId);
         setRemoteView(result.view);
@@ -1118,7 +1162,7 @@ export default function App() {
       } else {
         const room = createRoom(name, entry.kind === "join" ? entry.code : randomRoomCode());
         setViewerId(room.ownerId);
-        setGame(entry.kind === "join" || entry.kind === "practice" ? applyCommand(room, { type: "add-bot", actorId: room.ownerId }) : room);
+        setGame(room);
       }
     } catch (cause) {
       setError((cause as Error).message);
@@ -1165,7 +1209,14 @@ export default function App() {
         if (online) void send({ type: "set-settings", settings });
         else setGame((current) => current && applyCommand(current, { type: "set-settings", actorId: viewerId, settings }));
       }}
-      onAddDemo={() => setGame((current) => current && applyCommand(current, { type: "add-bot", actorId: viewerId }))}
+      onAddBot={() => {
+        if (online) void send({ type: "add-bot" });
+        else setGame((current) => current && applyCommand(current, { type: "add-bot", actorId: viewerId }));
+      }}
+      onRemoveBot={(playerId) => {
+        if (online) void send({ type: "remove-bot", playerId });
+        else setGame((current) => current && applyCommand(current, { type: "remove-player", actorId: viewerId, playerId }));
+      }}
       onStart={() => {
         setReviewedTrickCount(0);
         if (online) void send({ type: "start-round" });
@@ -1179,13 +1230,13 @@ export default function App() {
     online={online}
     selectedCardIds={selectedCardIds}
     onToggle={(id) => {
-      if (view.exchangeSubmittedPlayerIds.includes(viewerId)) return;
+      if (view.activePlayerId !== viewerId) return;
       setSelectedCardIds((current) => current.includes(id)
         ? current.filter((cardId) => cardId !== id) : [...current, id]);
     }}
     onExchange={finishHumanExchange}
     onKeep={finishHumanExchange}
-    exchangeBusy={busy || view.exchangeSubmittedPlayerIds.includes(viewerId)}
+    exchangeBusy={busy || view.activePlayerId !== viewerId}
     visibleDiscard={view.discardCount}
     onPlayTrickCard={playHumanCard}
     onDeclareChicago={() => {

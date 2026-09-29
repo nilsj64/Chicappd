@@ -96,7 +96,7 @@ export function evaluateHand(cards: readonly Card[]): HandEvaluation {
         : 0);
 
   if (straightHigh && flush)
-    return result("straight-flush", handCategoryPoints("straight-flush"), [straightHigh], "Färgstege");
+    return result("straight-flush", handCategoryPoints("straight-flush"), [straightHigh], `Färgstege – ${rankDisplay[straightHigh]} högst`);
   if (groups[0][1] === 4)
     return result(
       "four-of-a-kind",
@@ -111,8 +111,8 @@ export function evaluateHand(cards: readonly Card[]): HandEvaluation {
       [groups[0][0], groups[1][0]],
       `Kåk – ${rankPlural[groups[0][0]]} över ${rankPlural[groups[1][0]]}`,
     );
-  if (flush) return result("flush", handCategoryPoints("flush"), values, "Färg");
-  if (straightHigh) return result("straight", handCategoryPoints("straight"), [straightHigh], "Stege");
+  if (flush) return result("flush", handCategoryPoints("flush"), values, `Färg – ${rankDisplay[values[0]]} högst`);
+  if (straightHigh) return result("straight", handCategoryPoints("straight"), [straightHigh], `Stege – ${rankDisplay[straightHigh]} högst`);
   if (groups[0][1] === 3)
     return result(
       "three-of-a-kind",
@@ -172,9 +172,22 @@ const rankDisplay: Record<number, string> = {
   8: "åtta", 9: "nio", 10: "tio", 11: "knekt", 12: "dam", 13: "kung", 14: "ess",
 };
 
-/** Reveal comparison ranks only at showdown when the category alone cannot decide. */
+const shownRankCount: Record<HandCategory, number> = {
+  "high-card": 1, "one-pair": 1, "two-pair": 2, "three-of-a-kind": 1,
+  straight: 1, flush: 1, "full-house": 2, "four-of-a-kind": 1, "straight-flush": 1,
+};
+
+/** Show one decisive side card only when the normal label cannot explain the result. */
 export function showdownHandLabel(evaluation: HandEvaluation, all: readonly HandEvaluation[]): string {
-  return all.some((other) => other !== evaluation && other.category === evaluation.category)
-    ? `${evaluation.label} (jämförelse: ${evaluation.tiebreakers.map((rank) => rankDisplay[rank]).join(", ")})`
-    : evaluation.label;
+  const shown = shownRankCount[evaluation.category];
+  const peer = all.filter((other) => other !== evaluation && other.category === evaluation.category &&
+    evaluation.tiebreakers.slice(0, shown).every((rank, index) => rank === other.tiebreakers[index]) &&
+    compareHands(evaluation, other) !== 0).reduce<HandEvaluation | null>((best, other) =>
+    !best || compareHands(other, best) > 0 ? other : best, null);
+  if (!peer) return evaluation.label;
+  const decisive = evaluation.tiebreakers.findIndex((rank, index) => rank !== peer.tiebreakers[index]);
+  const detail = evaluation.category === "flush" || evaluation.category === "high-card"
+    ? "nästa högsta kort" : decisive === 1 ? "högsta sidokort" : "avgörande sidokort";
+  return decisive < shown ? evaluation.label
+    : `${evaluation.label} · ${rankDisplay[evaluation.tiebreakers[decisive]]} som ${detail}`;
 }

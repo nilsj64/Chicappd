@@ -109,7 +109,7 @@ export function correctIRLScore(game: IRLGame, playerId: string, newScore: numbe
     (!game.settings.allowNegativeScores && newScore < 0)) return game;
   return commit(game, { ...snapshot(game), players: game.players.map((player) => player.id === playerId
     ? { ...player, score: newScore } : player),
-    lastSummary: [...game.lastSummary, `Korrigering: ${game.players.find((p) => p.id === playerId)!.name} → ${newScore}`] });
+    lastSummary: [...game.lastSummary, `Korrigering: ${game.players.find((p) => p.id === playerId)!.name} till ${newScore}`] });
 }
 
 export function undoIRL(game: IRLGame): IRLGame {

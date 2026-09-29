@@ -15,6 +15,17 @@ const validName = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.trim().length <= 20;
 
 export class GameRoom extends DurableObject<Env> {
+  private advanceBots(game: GameState): GameState {
+    let next = game;
+    for (let turn = 0; turn < 20 && next.phase === "table" &&
+      next.tableStage === "tricks" && !next.waitingForNextTrick &&
+      next.players.find((player) => player.id === next.activePlayerId)?.control === "bot"; turn++) {
+      const advanced = applyCommand(next, { type: "advance-bot", actorId: next.ownerId });
+      if (advanced === next) break;
+      next = advanced;
+    }
+    return next;
+  }
   private async saved(): Promise<Saved | undefined> {
     return this.ctx.storage.get<Saved>("room");
   }
@@ -95,7 +106,8 @@ export class GameRoom extends DurableObject<Env> {
       return json({ left: true });
     }
     if (path === "/command" && request.method === "POST") {
-      const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown; settings?: GameSettings } | null;
+      const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown;
+        playerId?: unknown; settings?: GameSettings } | null;
       let command: GameCommand | null = null;
       if (input?.type === "start-round") command = { type: "start-round", actorId: session.playerId };
       if (input?.type === "exchange" && Array.isArray(input.discardIds) &&
@@ -106,10 +118,15 @@ export class GameRoom extends DurableObject<Env> {
       if (input?.type === "declare-chicago") command = { type: "declare-chicago", actorId: session.playerId };
       if (input?.type === "set-settings" && input.settings)
         command = { type: "set-settings", actorId: session.playerId, settings: input.settings };
+      if (input?.type === "add-bot") command = { type: "add-bot", actorId: session.playerId };
+      if (input?.type === "remove-bot" && typeof input.playerId === "string" &&
+        saved.game.players.some((player) => player.id === input.playerId && player.control === "bot"))
+        command = { type: "remove-player", actorId: session.playerId, playerId: input.playerId };
       if (input?.type === "return-lobby") command = { type: "return-lobby", actorId: session.playerId };
       if (!command) return json({ error: "Ogiltigt drag." }, 400);
-      const next = applyCommand(saved.game, command);
-      if (next === saved.game) return json({ error: "Draget är inte tillåtet just nu.", view: this.view(saved, session.playerId) }, 409);
+      const applied = applyCommand(saved.game, command);
+      if (applied === saved.game) return json({ error: "Draget är inte tillåtet just nu.", view: this.view(saved, session.playerId) }, 409);
+      const next = this.advanceBots(applied);
       saved = { ...saved, game: next };
       if (next.waitingForNextTrick) await this.ctx.storage.setAlarm(Date.now() + 1300);
       await this.persist(saved);
@@ -120,7 +137,8 @@ export class GameRoom extends DurableObject<Env> {
   async alarm() {
     const saved = await this.saved();
     if (!saved?.game.waitingForNextTrick) return;
-    const next = applyCommand(saved.game, { type: "continue-trick", actorId: saved.game.ownerId });
+    const next = this.advanceBots(applyCommand(saved.game, { type: "continue-trick", actorId: saved.game.ownerId }));
+    if (next.waitingForNextTrick) await this.ctx.storage.setAlarm(Date.now() + 1300);
     if (next !== saved.game) await this.persist({ ...saved, game: next });
   }
 }

@@ -6,6 +6,7 @@ import { canDeclareChicago, defaultSettings, finalTrickPoints } from "./scoring"
 import { correctIRLScore, createIRLGame, declareIRLChicago, finishIRLDeal, nextIRLDeal, recordFirstHands, undoIRL } from "./irl";
 import type { HandResult, IRLGame } from "./irl";
 import Brand from "./Brand";
+import { Icon, SuitIcon } from "./Icon";
 
 const storageKey = "chicappd-irl-game";
 const categories: Record<HandCategory, string> = {
@@ -102,11 +103,12 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
     <header className="irl-header">
       <Brand light />
       <span>FYSISKA KORT · POÄNGRÄKNARE</span>
-      <button type="button" onClick={onExit}>← Huvudmeny</button>
+      <button type="button" onClick={onExit}><Icon name="arrow-left" /> Huvudmeny</button>
       {game && <div className="irl-mobile-score">{game.players.map((player) => <span key={player.id}>{player.name} <strong>{player.score}</strong></span>)}</div>}
     </header>
     {!game ? <main className="irl-setup">
-      <div className="eyebrow">♠ ♥ ♦ ♣ &nbsp; SAMMA REGLER, RIKTIGA KORT</div>
+      <div className="eyebrow"><span className="suit-row"><SuitIcon suit="spades" /><SuitIcon suit="hearts" />
+        <SuitIcon suit="diamonds" /><SuitIcon suit="clubs" /></span> SAMMA REGLER, RIKTIGA KORT</div>
       <h1>Samla spelarna <em>runt bordet.</em></h1>
       <p>Ta fram en kortlek. Appen håller poängen medan ni spelar.</p>
       <section className="irl-card">
@@ -116,24 +118,24 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
             setNames((current) => current.map((item, position) => position === index ? event.target.value : item))} />
         </label>)}</div>
         <div className="irl-inline-actions">
-          <button type="button" onClick={() => setNames((current) => [...current, ""])} disabled={names.length >= 4}>+ Spelare</button>
+          <button type="button" onClick={() => setNames((current) => [...current, ""])} disabled={names.length >= 4}><Icon name="plus" /> Spelare</button>
           <button type="button" onClick={() => setNames((current) => current.slice(0, -1))} disabled={names.length <= 2}>Ta bort sista</button>
         </div>
         <h2>Regler</h2>
         <RuleSettings settings={settings} onChange={setSettings} />
         {setupError && <p role="alert" className="irl-error">{setupError}</p>}
-        <button type="button" className="button button-primary irl-primary" onClick={startMatch}>Starta match →</button>
+        <button type="button" className="button button-primary irl-primary" onClick={startMatch}>Starta match <Icon name="arrow-right" /></button>
       </section>
     </main> : <main className="irl-layout">
       <section className="irl-main">
         <div className="irl-round-heading"><span>GIV {game.dealNumber}</span><h1>{game.phase === "hands" ? "Registrera händerna" : game.phase === "tricks" ? "Stickspelet" : "Given är klar"}</h1>
           <p>Givare: {game.players[(game.dealNumber - 1) % game.players.length].name}</p></div>
-        {game.chicagoPlayerId && <div className="irl-chicago-active" role="status">★ CHICAGO · {game.players.find((p) => p.id === game.chicagoPlayerId)?.name} ska ta alla stick</div>}
+        {game.chicagoPlayerId && <div className="irl-chicago-active" role="status"><Icon name="star" /> CHICAGO · {game.players.find((p) => p.id === game.chicagoPlayerId)?.name} ska ta alla stick</div>}
         {game.phase === "hands" && <div className="irl-card">
           <p>Efter varje av de två första bytena: välj spelaren med bäst poänggivande hand och handens kategori. Vid lika bästa hand får ingen poäng.</p>
           <HandPicker title="Efter byte 1" game={game} value={firstHands[0]} onChange={(value) => setFirstHands([value, firstHands[1]])} />
           <HandPicker title="Efter byte 2" game={game} value={firstHands[1]} onChange={(value) => setFirstHands([firstHands[0], value])} />
-          <button type="button" className="button button-primary irl-primary" onClick={() => setGame(recordFirstHands(game, firstHands))}>Starta stickspelet →</button>
+          <button type="button" className="button button-primary irl-primary" onClick={() => setGame(recordFirstHands(game, firstHands))}>Starta stickspelet <Icon name="arrow-right" /></button>
         </div>}
         {game.phase === "tricks" && <div className="irl-card">
           {!game.chicagoPlayerId && <div className="irl-chicago-choice"><h2>Chicago?</h2><p>Kan sägas före första sticket av en spelare med minst 15 poäng.</p>
@@ -155,16 +157,16 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
                 {game.players.filter((player) => player.id !== game.chicagoPlayerId).map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select>
             </label>}</div>}
           {resultError && <p role="alert" className="irl-error">{resultError}</p>}
-          <button type="button" className="button button-primary irl-primary" onClick={finishDeal}>Räkna poäng och avsluta given →</button>
+          <button type="button" className="button button-primary irl-primary" onClick={finishDeal}>Räkna poäng och avsluta given <Icon name="arrow-right" /></button>
         </div>}
         {game.phase === "result" && <div className="irl-card irl-result"><h2>Poängen är registrerade</h2>
           <ul>{game.lastSummary.map((item, index) => <li key={index}>{item}</li>)}</ul>
-          <button type="button" className="button button-primary irl-primary" onClick={nextDeal}>Nästa giv →</button>
+          <button type="button" className="button button-primary irl-primary" onClick={nextDeal}>Nästa giv <Icon name="arrow-right" /></button>
         </div>}
       </section>
       <aside className="irl-side"><div className="irl-scoreboard"><span>POÄNGSTÄLLNING</span>
         {game.players.map((player, index) => <div className="irl-score-row" key={player.id}><span>{index + 1}. {player.name}</span><strong>{player.score}</strong></div>)}
-      </div><div className="irl-tools"><button type="button" onClick={() => setGame(undoIRL(game))} disabled={!game.history.length}>↶ Ångra senaste ändring</button>
+      </div><div className="irl-tools"><button type="button" onClick={() => setGame(undoIRL(game))} disabled={!game.history.length}><Icon name="undo" /> Ångra senaste ändring</button>
         <button type="button" onClick={() => { setCorrectionId(correctionId ? null : game.players[0].id); setCorrectionReady(false); }}>Korrigera poäng</button>
         {correctionId && <div className="irl-correction"><label>Spelare<select value={correctionId} onChange={(event) => { setCorrectionId(event.target.value); setCorrectionReady(false); }}>
           {game.players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>

@@ -19,6 +19,23 @@ test("human identities are distinct and lobby commands respect ownership", () =>
   assert.equal(applyCommand(room, { type: "remove-player", actorId: "human-a", playerId: "human-a" }).ownerId, "human-b");
 });
 
+test("ordinary rooms accept owner-managed bots alongside humans up to four seats", () => {
+  let game = humanRoom();
+  assert.strictEqual(applyCommand(game, { type: "add-bot", actorId: "human-b" }), game);
+  game = applyCommand(game, { type: "add-bot", actorId: "human-a" });
+  game = applyCommand(game, { type: "add-bot", actorId: "human-a" });
+  assert.deepEqual(game.players.map((player) => player.control), ["human", "human", "bot", "bot"]);
+  assert.strictEqual(applyCommand(game, { type: "add-bot", actorId: "human-a" }), game);
+  assert.strictEqual(applyCommand(game, { type: "remove-player", actorId: "human-b", playerId: game.players[2].id }), game);
+  game = applyCommand(game, { type: "remove-player", actorId: "human-a", playerId: game.players[2].id });
+  assert.deepEqual(game.players.map((player) => player.control), ["human", "human", "bot"]);
+  assert.equal(applyCommand(game, { type: "start-round", actorId: "human-a" }).players.length, 3);
+
+  let solo = createRoom("Ada", "ABCDE", "human-a");
+  solo = applyCommand(solo, { type: "add-bot", actorId: "human-a" });
+  assert.equal(applyCommand(solo, { type: "start-round", actorId: "human-a" }).players.length, 2);
+});
+
 test("player views conceal other hands, deck order, discard identities, and pending evaluations", () => {
   let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
   const a = viewForPlayer(game, "human-a");
@@ -57,6 +74,86 @@ test("human exchanges wait for every human and reject duplicates or invalid card
   assert.equal(game.exchangeCount, 1);
   assert.deepEqual(game.exchangeSubmittedPlayerIds, []);
   assert.equal(game.handAwards.length, 1);
+});
+
+test("exchange events follow seat order and scoring closes each exchange before the next", () => {
+  let game = applyCommand(humanRoom(), { type: "add-bot", actorId: "human-a" });
+  game = applyCommand(game, { type: "start-round", actorId: "human-a" });
+  assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] }), game);
+  const hiddenCard = game.players[0].hand[0].id;
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [hiddenCard] });
+  assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["human-a"]);
+  game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
+  assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["human-a", "human-b", "demo-1"]);
+  assert.deepEqual(game.exchangeEvents.map((event) => event.id), [1, 2, 3]);
+  assert.equal(game.exchangeCount, 1);
+  assert.match(game.activity.at(-1), /efter byte 1/);
+  assert.deepEqual(game.activity.slice(0, 3).map((message) => message.slice(0, 7)),
+    ["Byte 1:", "Byte 1:", "Byte 1:"]);
+  const publicView = viewForPlayer(game, "human-b");
+  assert.deepEqual(publicView.exchangeEvents, game.exchangeEvents);
+  assert.equal(JSON.stringify(publicView.exchangeEvents).includes(hiddenCard), false);
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.match(game.activity.at(-1), /^Byte 2:/);
+  assert.match(game.activity.at(-2), /efter byte 1/);
+});
+
+test("round starter rotates and wraps through four human seats; trick winners lead next", () => {
+  let game = humanRoom();
+  game = applyCommand(game, { type: "add-human", actorId: "human-a", playerId: "human-c", name: "Cy" });
+  game = applyCommand(game, { type: "add-human", actorId: "human-a", playerId: "human-d", name: "Dee" });
+  for (const starterId of ["human-a", "human-b", "human-c", "human-d", "human-a"]) {
+    game = applyCommand(game, { type: "start-round", actorId: "human-a" });
+    assert.equal(game.roundStarterId, starterId);
+    assert.equal(game.activePlayerId, starterId);
+    for (let exchange = 0; exchange < 3; exchange++) {
+      assert.strictEqual(applyCommand(game, { type: "exchange", actorId: game.players.find((p) => p.id !== starterId).id,
+        discardIds: [] }), game);
+      for (let seat = 0; seat < 4; seat++)
+        game = applyCommand(game, { type: "exchange", actorId: game.activePlayerId, discardIds: [] });
+      assert.equal(game.exchangeCount, exchange + 1);
+    }
+    assert.equal(game.activePlayerId, starterId);
+    while (game.tableStage !== "result") {
+      const actor = game.players.find((p) => p.id === game.activePlayerId);
+      const card = legalCards(actor.hand, game.currentTrick[0]?.card.suit ?? null)[0];
+      game = applyCommand(game, { type: "play-card", actorId: actor.id, cardId: card.id });
+      if (game.waitingForNextTrick) {
+        assert.equal(game.activePlayerId, game.completedTricks.at(-1).winnerId);
+        game = applyCommand(game, { type: "continue-trick", actorId: "human-a" });
+      }
+    }
+  }
+});
+
+test("bot starter and bot exchanges are shared public events in clockwise order", () => {
+  let game = createRoom("Ada", "ABCDE", "human-a");
+  for (let i = 0; i < 3; i++) game = applyCommand(game, { type: "add-bot", actorId: "human-a" });
+  game = applyCommand(game, { type: "start-round", actorId: "human-a" });
+  for (let exchange = 0; exchange < 3; exchange++)
+    game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  while (game.tableStage !== "result") {
+    const actor = game.players.find((p) => p.id === game.activePlayerId);
+    game = applyCommand(game, { type: "advance-bot", actorId: "human-a" });
+    if (actor.control === "human") {
+      const card = legalCards(actor.hand, game.currentTrick[0]?.card.suit ?? null)[0];
+      game = applyCommand(game, { type: "play-card", actorId: actor.id, cardId: card.id });
+    }
+    if (game.waitingForNextTrick)
+      game = applyCommand(game, { type: "continue-trick", actorId: "human-a" });
+  }
+  game = applyCommand(game, { type: "start-round", actorId: "human-a" });
+  assert.equal(game.roundStarterId, "demo-1");
+  assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["demo-1", "demo-2", "demo-3"]);
+  assert.equal(game.activePlayerId, "human-a");
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.deepEqual(game.exchangeEvents.slice(0, 4).map((event) => event.playerId),
+    ["demo-1", "demo-2", "demo-3", "human-a"]);
+  assert.match(game.activity.at(4), /efter byte 1/);
+  for (let exchange = 0; exchange < 2; exchange++)
+    game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.equal(game.tableStage, "tricks");
+  assert.equal(game.activePlayerId, "demo-1");
 });
 
 test("turn and shared progression commands require the right human or owner", () => {

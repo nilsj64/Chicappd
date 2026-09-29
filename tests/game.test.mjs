@@ -41,13 +41,26 @@ const examples = [
   ["straight-flush", hand(["9", H], ["8", H], ["7", H], ["6", H], ["5", H])],
 ];
 
-test("showdown explains ranks only when players share a hand category", () => {
+test("showdown explains a kicker only when the visible hand value is tied", () => {
   const aces = evaluateHand(hand(["A", S], ["A", H], ["9", D], ["6", C], ["3", S]));
   const kings = evaluateHand(hand(["K", S], ["K", H], ["Q", D], ["6", C], ["3", S]));
   const flush = evaluateHand(hand(["A", H], ["J", H], ["9", H], ["6", H], ["3", H]));
+  const otherAces = evaluateHand(hand(["A", D], ["A", C], ["Q", S], ["6", H], ["3", C]));
+  const sameTopKicker = evaluateHand(hand(["A", D], ["A", C], ["9", S], ["7", H], ["3", C]));
   assert.equal(showdownHandLabel(aces, [aces, flush]), aces.label);
-  assert.match(showdownHandLabel(aces, [aces, kings]), /jämförelse: ess, nio, sex, tre/);
+  assert.equal(showdownHandLabel(aces, [aces, kings]), aces.label);
+  assert.equal(showdownHandLabel(otherAces, [aces, otherAces]), "Ett par – ess · dam som högsta sidokort");
+  assert.equal(showdownHandLabel(sameTopKicker, [aces, sameTopKicker]), "Ett par – ess · sju som avgörande sidokort");
   assert.ok(compareHands(aces, kings) > 0);
+  assert.ok(compareHands(otherAces, aces) > 0);
+  assert.ok(compareHands(sameTopKicker, aces) > 0);
+
+  const highTwoPair = evaluateHand(hand(["J", S], ["J", H], ["8", D], ["8", C], ["3", S]));
+  const lowerTwoPair = evaluateHand(hand(["J", D], ["J", C], ["7", S], ["7", H], ["A", S]));
+  const kickerTwoPair = evaluateHand(hand(["J", D], ["J", C], ["8", S], ["8", H], ["4", S]));
+  assert.equal(showdownHandLabel(highTwoPair, [highTwoPair, lowerTwoPair]), highTwoPair.label);
+  assert.match(showdownHandLabel(kickerTwoPair, [highTwoPair, kickerTwoPair]), /fyra som avgörande sidokort/);
+  assert.ok(compareHands(kickerTwoPair, highTwoPair) > 0);
 });
 
 test("recognizes all nine categories in strength order", () => {
@@ -427,7 +440,7 @@ test("four players exchange directly and score only after exchanges 1 and 2", ()
     assert.equal(ids.length, 52);
     assert.equal(new Set(ids).size, 52);
     assert.equal(game.handAwards.length, Math.min(round + 1, 2));
-    assert.ok(game.activity.some((message) => message.startsWith("Alex ")));
+    assert.ok(game.activity.some((message) => message.startsWith("Byte 1: Alex ")));
   }
   assert.ok(game.finalHands);
   assert.equal(game.tableStage, "tricks");

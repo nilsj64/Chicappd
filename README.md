@@ -2,7 +2,7 @@
 
 Chicappd is a two-to-four-player online card game with a static React/Vite frontend on GitHub Pages and a Cloudflare Worker with one Durable Object per room. The Worker holds the only full game state. Each client receives a player-specific view and sends commands that the Worker validates in order. WebSockets update all clients automatically. A room code admits additional players; an unguessable temporary token identifies each seat and is saved in that browser for reloads. No account is required.
 
-The local practice mode against bots remains available. Online rooms support two to four human players.
+Rooms support two to four players in any mix of humans and CPU players. The room owner can add or remove CPU players in the lobby; a single human can start with CPU opponents. When no multiplayer API is configured, creating a room uses the same game model locally with CPU players.
 
 ## Local development
 
@@ -19,7 +19,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open the Vite URL in two different browsers or browser profiles. Create a room in one, join with the five-character code in the other, and start from the owner's lobby. For automated verification against the local Worker, run `npm run test:online`. Run `npm test`, `npm run build`, and `npm run server:check` for the other checks.
+Open the Vite URL in two different browsers or browser profiles. Create a room in one, join with the five-character code in the other, or add CPU players in the lobby. For automated verification against the local Worker, run `npm run test:online`. Run `npm test`, `npm run build`, and `npm run server:check` for the other checks.
 
 ## Put multiplayer online
 
@@ -37,6 +37,6 @@ The public Worker URL is not a credential. Room tokens are generated on the Work
 - `src/poker.ts` ranks five-card hands; `src/tricks.ts` enforces following suit.
 - `server/worker.ts` authenticates temporary seats, persists rooms, validates commands, and broadcasts filtered views.
 - `src/online.ts` handles the browser's session, API requests, and WebSocket reconnection.
-- `src/App.tsx` renders the lobby, table, and local practice flow.
+- `src/App.tsx` renders the lobby and table for both online and local rooms.
 
 Players exchange or keep cards three times. The best qualifying hand scores after exchanges one and two. Five tricks follow; the fifth trick awards five points, then the saved final hands are compared. Scores carry into “Spela en runda till”. A tie for best hand awards no poker points. The server keeps deck order, discards, and other players' hands private. Its stored room survives ordinary page reloads and Worker restarts; refreshing a browser resumes its seat using the saved token.
