@@ -6,25 +6,11 @@ type Reply = { view?: GameView; token?: string; playerId?: string; error?: strin
 const storageKey = "chicappd-online-session";
 
 function roomView(view: GameView | undefined): GameView {
-  console.log("ROOM VIEW RAW:", view);
-
-  if (!view) {
-    throw new Error("Spelservern gav inget GameView.");
-  }
-
-  if (!view.settings) {
-    console.log("GAME VIEW UTAN SETTINGS:", view);
-    throw new Error("Spelservern gav GameView utan settings.");
-  }
-
-  return {
-    ...view,
-    settings: {
-      ...view.settings,
-      finalTrickPoints: view.settings.finalTrickPoints ?? 5,
-      allowNegativeScores: view.settings.allowNegativeScores ?? false,
-    },
-  };
+  if (!view) throw new Error("Spelservern gav ett ofullständigt svar.");
+  if (!view.settings || ![2, 5].includes(view.settings.finalTrickPoints) ||
+    typeof view.settings.allowNegativeScores !== "boolean")
+    throw new Error("Spelservern behöver uppdateras innan nya rum kan användas. Försök igen senare.");
+  return view;
 }
 
 export function savedSession(): OnlineSession | null {
@@ -45,7 +31,9 @@ async function call(path: string, init: RequestInit = {}): Promise<Reply> {
       ...init, headers: { "content-type": "application/json", ...init.headers },
     });
   } catch { throw new Error("Kunde inte nå spelservern. Kontrollera anslutningen."); }
-  const data = await response.json() as Reply;
+  let data: Reply;
+  try { data = await response.json() as Reply; }
+  catch { throw new Error("Spelservern gav ett ogiltigt svar. Försök igen."); }
   if (!response.ok) throw new Error(data.error ?? "Något gick fel.");
   return data;
 }
