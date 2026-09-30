@@ -38,6 +38,8 @@ test("Chicago requires 15 current points, including exactly 15", () => {
   assert.strictEqual(applyCommand(low, { type: "declare-chicago", actorId: "ada" }), low);
   game = applyCommand(game, { type: "declare-chicago", actorId: "ada" });
   assert.equal(game.chicagoPlayerId, "ada");
+  assert.equal(game.players[0].hasDeclaredChicago, true);
+  assert.equal(viewForPlayer(game, "bea").players[0].hasDeclaredChicago, true);
   assert.equal(viewForPlayer(game, "bea").chicagoPlayerId, "ada");
   assert.strictEqual(applyCommand(game, { type: "declare-chicago", actorId: "bea" }), game);
   const started = applyCommand(game, { type: "play-card", actorId: "ada", cardId: game.players[0].hand[0].id });
@@ -60,6 +62,8 @@ test("winning Chicago awards 15 once and keeps normal final-trick points", () =>
   assert.deepEqual(game.chicagoAward, { playerId: "ada", points: 15 });
   assert.equal(game.chicagoBreakerId, null);
   assert.equal(game.players[0].score, 35);
+  assert.ok(game.activity.some((event) => /sista sticket \(\+5 p enligt regeln för sista sticket\)/.test(event)));
+  assert.ok(game.activity.some((event) => /vann Chicago \(\+15 p\)/.test(event)));
   assert.strictEqual(applyCommand(game, { type: "continue-trick", actorId: "ada" }), game);
 });
 
@@ -69,8 +73,11 @@ test("first breaker alone gets 10 and losing Chicago costs 15", () => {
   assert.deepEqual(game.chicagoAward, { playerId: "ada", points: -15 });
   assert.equal(game.chicagoBreakerId, "bea");
   assert.equal(game.players[0].score, 0);
+  assert.equal(game.players[0].hasDeclaredChicago, true);
   assert.equal(game.players[1].score, 15); // +10 break and +5 final trick
   assert.equal(game.activity.filter((event) => event.includes("bröt Chicago")).length, 1);
+  const nextRound = applyCommand(game, { type: "start-round", actorId: "ada" });
+  assert.equal(nextRound.players[0].hasDeclaredChicago, true);
 });
 
 test("negative-score setting applies to Chicago and 2/5 remains final-trick scoring", () => {

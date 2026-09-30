@@ -1,9 +1,9 @@
-import { compareHands, evaluateHand, showdownHandLabel } from "./poker.ts";
+import { compareHands, evaluateHand, handCategoryName } from "./poker.ts";
 import type { HandEvaluation } from "./poker.ts";
 import { chooseBotDiscards, chooseBotTrickCard } from "./bot.ts";
 import { legalCards, trickWinner } from "./tricks.ts";
 import type { PlayedCard } from "./tricks.ts";
-import { canDeclareChicago, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, scoreAfter } from "./scoring.ts";
+import { canDeclareChicago, canExchangeCards, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, matchWinnerId, scoreAfter } from "./scoring.ts";
 
 export const suits = ["spades", "hearts", "diamonds", "clubs"] as const;
 export const ranks = [
@@ -30,6 +30,7 @@ export type Player = {
   name: string;
   control: "human" | "bot";
   score: number;
+  hasDeclaredChicago: boolean;
   hand: Card[];
 };
 export type Phase = "lobby" | "table";
@@ -125,6 +126,7 @@ export function createRoom(
     name: name.trim(),
     control: "human",
     score: 0,
+    hasDeclaredChicago: false,
     hand: [],
   };
   return {
@@ -177,6 +179,7 @@ export function addDemoPlayer(game: GameState): GameState {
         name,
         control: "bot",
         score: 0,
+        hasDeclaredChicago: false,
         hand: [],
       },
     ],
@@ -184,7 +187,8 @@ export function addDemoPlayer(game: GameState): GameState {
 }
 
 export function startRound(game: GameState): GameState {
-  if (game.players.length < 2 || (game.phase !== "lobby" && game.tableStage !== "result")) return game;
+  if (game.players.length < 2 || matchWinnerId(game.players) ||
+    (game.phase !== "lobby" && game.tableStage !== "result")) return game;
   const deck = shuffled(createDeck());
   const players = game.players.map((player) => ({
     ...player,
@@ -239,7 +243,9 @@ function returnToLobby(game: GameState): GameState {
 
 export function toggleCard(game: GameState, cardId: string): GameState {
   if (game.phase !== "table" || game.tableStage !== "exchange") return game;
-  const localHand = game.players.find((player) => player.id === game.ownerId)?.hand ?? [];
+  const local = game.players.find((player) => player.id === game.ownerId);
+  if (!local || !canExchangeCards(local.score)) return game;
+  const localHand = local.hand;
   if (!localHand.some((card) => card.id === cardId)) return game;
   const selected = game.selectedCardIds.includes(cardId)
     ? game.selectedCardIds.filter((id) => id !== cardId)
@@ -268,9 +274,7 @@ function scorePokerHands(
     players: winnerId ? addPoints(game, game.players, winnerId, points) : game.players,
     handAwards: [...game.handAwards, award],
     activity: [...game.activity, winnerId
-      ? exchangeCount === 3
-        ? `${best!.name} har bäst hand vid rundans slut: ${showdownHandLabel(evaluations[winnerId], Object.values(evaluations))} (+${points} p)`
-        : `${best!.name} fick ${points} p för bästa handen efter byte ${exchangeCount}`
+      ? `${best!.name} hade bästa hand (${handCategoryName[evaluations[winnerId].category]}) och fick ${points} poäng${exchangeCount === 3 ? " vid rundans slut" : ` efter byte ${exchangeCount}`}`
       : `Ingen fick poäng för handen efter byte ${exchangeCount}`],
   };
 }
@@ -312,7 +316,7 @@ function exchangePlayerCards(
   const player = game.players.find((candidate) => candidate.id === playerId);
   const selected = new Set(discardedIds);
   if (
-    !player || player.hand.length !== 5 ||
+    !player || player.hand.length !== 5 || (selected.size > 0 && !canExchangeCards(player.score)) ||
     selected.size !== discardedIds.length ||
     !discardedIds.every((id) => player.hand.some((card) => card.id === id)) ||
     game.deck.length + game.discard.length < selected.size
@@ -342,8 +346,9 @@ function exchangePlayerCards(
 function submitExchange(game: GameState, playerId: string, discardedIds: readonly string[]): GameState {
   if (game.pendingExchange || !canFinishExchange(game) || game.activePlayerId !== playerId ||
     game.exchangeSubmittedPlayerIds.includes(playerId)) return game;
+  const player = game.players.find((candidate) => candidate.id === playerId);
+  if (discardedIds.length && (!player || !canExchangeCards(player.score))) return game;
   if (discardedIds.length === 1) {
-    const player = game.players.find((candidate) => candidate.id === playerId);
     if (!player?.hand.some((card) => card.id === discardedIds[0])) return game;
     const deck = game.deck.length >= 2 ? game.deck : [...game.deck, ...shuffled(game.discard)];
     if (deck.length < 2) return game;
@@ -406,10 +411,18 @@ function submitAcceptedSingle(game: GameState, playerId: string, discardId: stri
 
 function runExchangeBots(game: GameState): GameState {
   let next = game;
-  for (let turn = 0; turn < 12 && next.tableStage === "exchange" && !next.pendingExchange; turn++) {
+  for (let turn = 0; turn < 12 && next.tableStage === "exchange"; turn++) {
+    if (next.pendingExchange) {
+      const waiting = next.players.find((player) => player.id === next.pendingExchange?.playerId);
+      if (waiting?.control !== "bot") break;
+      const answered = answerExchange(next, waiting.id, true);
+      if (answered === next) break;
+      next = answered;
+      continue;
+    }
     const bot = next.players.find((player) => player.id === next.activePlayerId);
     if (!bot || bot.control !== "bot") break;
-    const advanced = submitExchange(next, bot.id, chooseBotDiscards(bot.hand));
+    const advanced = submitExchange(next, bot.id, canExchangeCards(bot.score) ? chooseBotDiscards(bot.hand) : []);
     if (advanced === next) break;
     next = advanced;
   }
@@ -515,7 +528,7 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
       selectedCardIds: [],
       trickError: null,
       finalTrickAward: { winnerId, points },
-      activity: [...activity, ...breakActivity, `${winnerName} vann sista sticket (+${points} p)`,
+      activity: [...activity, ...breakActivity, `${winnerName} vann sista sticket (+${points} p enligt regeln för sista sticket)`,
         ...(chicagoAward ? [`${players.find((p) => p.id === chicagoAward.playerId)!.name} ${chicagoAward.points > 0 ? "vann" : "förlorade"} Chicago (${chicagoAward.points > 0 ? "+" : ""}${chicagoAward.points} p)`] : [])],
     };
     return afterTrick.finalHands
@@ -628,12 +641,13 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
       if (game.phase !== "table" || game.tableStage !== "tricks" ||
         game.currentTrick.length || game.completedTricks.length || game.chicagoPlayerId || !canDeclareChicago(actor.score)) return game;
       return { ...game, chicagoPlayerId: actor.id,
+        players: game.players.map((player) => player.id === actor.id ? { ...player, hasDeclaredChicago: true } : player),
         activity: [...game.activity, `${actor.name} säger Chicago – måste vinna alla stick`] };
     case "add-human":
       if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= 4 ||
         typeof command.playerId !== "string" || !command.playerId || typeof command.name !== "string" ||
         !command.name.trim() || game.players.some((p) => p.id === command.playerId)) return game;
-      return { ...game, players: [...game.players, { id: command.playerId, name: command.name.trim(), control: "human", score: 0, hand: [] }] };
+      return { ...game, players: [...game.players, { id: command.playerId, name: command.name.trim(), control: "human", score: 0, hasDeclaredChicago: false, hand: [] }] };
     case "add-bot":
       return command.actorId === game.ownerId ? addDemoPlayer(game) : game;
     case "remove-player":
@@ -697,6 +711,7 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
   return {
     roomCode: game.roomCode, ownerId: game.ownerId, phase: game.phase, tableStage: game.tableStage,
     players: game.players.map((p) => ({ id: p.id, name: p.name, control: p.control, score: p.score,
+      hasDeclaredChicago: p.hasDeclaredChicago ?? false,
       hand: p.id === viewerId ? [...p.hand] : [], handCount: p.hand.length })),
     deckCount: game.deck.length, discardCount: game.discard.length,
     activePlayerId: game.activePlayerId, selectedCardIds: [], exchangeCount: game.exchangeCount,

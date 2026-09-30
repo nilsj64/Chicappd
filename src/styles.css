@@ -1597,6 +1597,28 @@ p {
     600 19px Fraunces,
     serif;
 }
+.chicago-check {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1px solid #a9b9aa;
+  border-radius: 3px;
+  color: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+.chicago-check.checked { background: #365e47; border-color: #365e47; color: #fffefa; }
+.match-podium { padding: 14px; border: 1px solid #dbe4d8; border-radius: 10px; background: #fffefa; color: #183e34; }
+.match-podium h3 { margin: 0 0 10px; font-size: 14px; }
+.match-podium ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.match-podium li { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 5px; background: #e8efe4; font-size: 12px; }
+.match-podium li strong { flex: 1; }
+.podium-place { min-width: 24px; color: #9b765f; font-weight: 800; }
+.lobby-content > .match-podium { grid-column: 1 / -1; }
+.round-summary .match-podium { background: #e8efe4; }
 .score-foot {
   border-top: 1px solid #e7ece3;
   padding: 13px 15px;

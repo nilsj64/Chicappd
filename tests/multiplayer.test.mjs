@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applyCommand, createRoom, viewForPlayer } from "../src/game.ts";
 import { legalCards } from "../src/tricks.ts";
+import { matchStandings, matchWinnerId } from "../src/scoring.ts";
 
 function humanRoom() {
   const owner = createRoom("Ada", "ABCDE", "human-a");
@@ -127,6 +128,7 @@ test("exchange events follow seat order and scoring closes each exchange before 
   game = applyCommand(game, { type: "exchange-choice", actorId: "human-a", accept: true });
   assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["human-a"]);
   game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
+  game = settleBotOffers(game);
   assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["human-a", "human-b", "demo-1"]);
   assert.deepEqual(game.exchangeEvents.map((event) => event.id), [1, 2, 3]);
   assert.equal(game.exchangeCount, 1);
@@ -293,15 +295,15 @@ test("leaving an active room removes the player and returns remaining players to
   assert.equal(applyCommand(game, { type: "add-human", actorId: "human-b", playerId: "human-c", name: "Cy" }).players.length, 2);
 });
 
-test("early activity hides private hand details and result activity reveals the winning comparison", () => {
+test("hand awards name only the category and keep early evaluations private", () => {
   let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
   for (let exchange = 0; exchange < 2; exchange++) {
     game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
     game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
     assert.deepEqual(viewForPlayer(game, "human-a").players.map((p) => p.score),
       game.players.map((p) => p.score));
-    assert.ok(game.activity.some((event) => /fick \d+ p för bästa handen|Ingen fick poäng/.test(event)));
-    assert.ok(game.activity.every((event) => !/jämförelse:|Ett par|Två par|Triss|Kåk|Fyrtal|Högt kort|Färg|Stege/.test(event)));
+    assert.ok(game.activity.some((event) => /hade bästa hand \([^)]+\) och fick \d+ poäng|Ingen fick poäng/.test(event)));
+    assert.ok(game.activity.every((event) => !/jämförelse:|ess|kungar|damer|knektar/.test(event)));
     assert.deepEqual(viewForPlayer(game, "human-a").handAwards.at(-1).evaluations, {});
   }
   game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
@@ -314,6 +316,51 @@ test("early activity hides private hand details and result activity reveals the 
       game = applyCommand(game, { type: "continue-trick", actorId: "human-a" });
   }
   assert.ok(Object.keys(viewForPlayer(game, "human-a").handAwards.at(-1).evaluations).length === 2);
-  if (game.handAwards.at(-1).winnerId)
-    assert.ok(game.activity.at(-1).includes(game.handAwards.at(-1).evaluations[game.handAwards.at(-1).winnerId].label));
+  if (game.handAwards.at(-1).winnerId) {
+    const award = game.handAwards.at(-1);
+    assert.match(game.activity.at(-1), /hade bästa hand \([^)]+\) och fick \d+ poäng/);
+    assert.ok(!game.activity.at(-1).includes(award.evaluations[award.winnerId].label));
+  }
+});
+
+test("46 points blocks card changes but keeping a hand still advances the exchange", () => {
+  let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
+  game = { ...game, players: game.players.map((player) => player.id === "human-a" ? { ...player, score: 45 } : player) };
+  const twoCards = game.players[0].hand.slice(0, 2).map((card) => card.id);
+  const changed = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: twoCards });
+  assert.notStrictEqual(changed, game);
+  assert.equal(changed.exchangeEvents[0].changedCards, 2);
+
+  game = { ...game, players: game.players.map((player) => player.id === "human-a" ? { ...player, score: 46 } : player) };
+  assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: twoCards }), game);
+  const kept = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.equal(kept.exchangeEvents[0].changedCards, 0);
+  assert.deepEqual(kept.players[0].hand, game.players[0].hand);
+  assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [twoCards[0]] }), game);
+});
+
+test("a CPU at 46 keeps its hand and the room continues", () => {
+  let game = applyCommand(createRoom("Ada", "ABCDE", "human-a"), { type: "add-bot", actorId: "human-a" });
+  game = applyCommand(game, { type: "start-round", actorId: "human-a" });
+  game = { ...game, players: game.players.map((player) => player.control === "bot"
+    ? { ...player, score: 46 } : player) };
+  const botHand = game.players[1].hand;
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.equal(game.exchangeCount, 1);
+  assert.deepEqual(game.exchangeEvents.map((event) => event.changedCards), [0, 0]);
+  assert.deepEqual(game.players[1].hand, botHand);
+});
+
+test("only a player with a past Chicago declaration can finish at 52", () => {
+  const room = humanRoom();
+  const scored = { ...room, players: room.players.map((player) => player.id === "human-a"
+    ? { ...player, score: 52 } : player) };
+  assert.equal(matchWinnerId(scored.players), null);
+  assert.notStrictEqual(applyCommand(scored, { type: "start-round", actorId: "human-a" }), scored);
+  const declared = { ...scored, players: scored.players.map((player) => player.id === "human-a"
+    ? { ...player, hasDeclaredChicago: true } : player) };
+  assert.equal(matchWinnerId(declared.players), "human-a");
+  assert.strictEqual(applyCommand(declared, { type: "start-round", actorId: "human-a" }), declared);
+  assert.deepEqual(matchStandings([{ id: "b", score: 50 }, { id: "a", score: 52 }, { id: "c", score: 40 }], "a")
+    .map((player) => player.id), ["a", "b", "c"]);
 });

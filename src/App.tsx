@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { evaluateHand, showdownHandLabel } from "./poker";
+import { evaluateHand, handCategoryName } from "./poker";
 import type { Card, ExchangeEvent, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
@@ -18,6 +18,8 @@ import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
+import { canExchangeCards, matchWinnerId } from "./scoring";
+import { MatchPodium } from "./MatchPodium";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
@@ -355,6 +357,7 @@ function Lobby({
   onLeave: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const matchWinner = matchWinnerId(game.players);
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(game.roomCode);
@@ -383,6 +386,7 @@ function Lobby({
           <p>{online ? "Dela rumskoden med vänner eller lägg till datorstyrda spelare. Ägaren startar när minst två spelare är här." : "Lägg till datorstyrda spelare och starta när ni är minst två."}</p>
         </div>
         <div className="lobby-content">
+          {matchWinner && <MatchPodium players={game.players} winnerId={matchWinner} />}
           <section className="lobby-panel">
             <div className="panel-topline">
               <span>SPELARE</span>
@@ -440,12 +444,13 @@ function Lobby({
             <button
               className="button button-primary start-button"
               onClick={onStart}
-              disabled={game.players.length < 2 || game.ownerId !== viewerId}
+              disabled={game.players.length < 2 || game.ownerId !== viewerId || !!matchWinner}
             >
               Börja spela <Icon name="arrow-right" />
             </button>
             <small>
-              {game.players.length < 2
+              {matchWinner ? "Matchen är avgjord. Skapa ett nytt rum för en ny match."
+                : game.players.length < 2
                 ? "Bjud in en vän eller lägg till en datorstyrd spelare."
                 : "Starta matchen med fem kort var."}
             </small>
@@ -646,12 +651,17 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
               {player.name}
               {player.id === viewerId && <small>DU</small>}
             </span>
+            <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`}
+              role="img" aria-label={player.hasDeclaredChicago ? `${player.name} har sagt Chicago` : `${player.name} har inte sagt Chicago`}
+              title={player.hasDeclaredChicago ? "Har sagt Chicago" : "Har inte sagt Chicago"}>
+              {player.hasDeclaredChicago ? "✓" : ""}
+            </span>
             <strong>{player.score}</strong>
           </div>
         ))}
       </div>
       <div className="score-foot">
-        Poäng delas ut för bästa handen efter första och andra bytet samt efter sticken. Sista sticket ger också poäng.
+        ✓ = har sagt Chicago · 52 poäng krävs för vinst. Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.
       </div>
     </aside>
   );
@@ -715,6 +725,8 @@ function Table({
   onLeave: () => void;
 }) {
   const local = game.players.find((player) => player.id === viewerId)!;
+  const exchangeAllowed = canExchangeCards(local.score);
+  const matchWinner = game.tableStage === "result" ? matchWinnerId(game.players) : null;
   const [supportOpen, setSupportOpen] = useState(false);
   const advice = supportOpen ? supportAdvice(game, viewerId) : null;
   const opponents = game.players.filter((player) => player.id !== viewerId);
@@ -734,10 +746,11 @@ function Table({
   const showResult = game.tableStage === "result" && !pendingTrick && !flight;
   const currentCardIds = new Set((game.currentTrick.length
     ? game.currentTrick : pendingTrick ? lastTrick?.cards ?? [] : []).map((played) => played.card.id));
-  const selectionCount = selectedCardIds.length;
+  const selectionCount = exchangeAllowed ? selectedCardIds.length : 0;
   const currentEvaluation = exchanging ? evaluateHand(local.hand) : null;
   const finalAward = game.handAwards.find((award) => award.exchangeCount === 3);
-  const showdownEvaluations = Object.values(finalAward?.evaluations ?? {});
+  const finalWinnerCategory = finalAward?.winnerId
+    ? finalAward.evaluations[finalAward.winnerId]?.category : undefined;
   const finalTrickWinner = game.players.find((player) => player.id === game.finalTrickAward?.winnerId);
   const chicagoPlayer = game.players.find((player) => player.id === game.chicagoPlayerId);
   const chicagoBreaker = game.players.find((player) => player.id === game.chicagoBreakerId);
@@ -803,7 +816,7 @@ function Table({
     disabled={exchangeBusy || !!exchangePlayback || !yourExchangeTurn || !!pendingExchange}
   >
     {selectionCount ? `Byt ${selectionCount} kort`
-      : "Behåll handen"}
+      : exchangeAllowed ? "Behåll handen" : "Behåll handen · 46+ poäng"}
     <Icon name="arrow-right" />
   </button>;
   const legalTrickIds = new Set(playingTricks
@@ -890,21 +903,22 @@ function Table({
                     : ""
                   : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är slut"}</h2>}
                 {showResult && <div className="round-summary">
+                  {matchWinner && <MatchPodium players={game.players} winnerId={matchWinner} />}
                   <div className="round-awards">
-                    <div><span>Sista sticket</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} p</b></strong></div>
+                    <div><span>Sista sticket · separat regel</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} p</b></strong></div>
                     <div><span>Bästa handen</span><strong>{finalAward?.winnerId
-                      ? game.players.find((player) => player.id === finalAward.winnerId)?.name : "Ingen"}
+                      ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalWinnerCategory ? handCategoryName[finalWinnerCategory] : ""}` : "Ingen"}
                       <b>+{finalAward?.points ?? 0} p</b></strong></div>
                     {game.chicagoAward && <div><span>Chicago</span><strong>{chicagoPlayer?.name}
                       <b>{game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} p</b></strong></div>}
                   </div>
                   <div className="round-hands"><h3>Händer vid rundans slut</h3><ul>{game.players.map((player) => <li key={player.id}>
                     <span>{player.name}</span><span>{finalAward?.evaluations[player.id]
-                      ? showdownHandLabel(finalAward.evaluations[player.id], showdownEvaluations).replace(" – ", ", ") : ""}</span>
+                      ? handCategoryName[finalAward.evaluations[player.id].category] : ""}</span>
                   </li>)}</ul></div>
-                  <button className="button button-next-round" onClick={onNextRound}>
+                  {!matchWinner && <button className="button button-next-round" onClick={onNextRound}>
                     Spela en runda till <Icon name="arrow-right" />
-                  </button>
+                  </button>}
                 </div>}
               </div>}
             </div>
@@ -918,7 +932,7 @@ function Table({
                   </strong>
                   {game.tableStage !== "result" && <small>
                     {exchanging ? yourChoice ? "Välj Ja eller Nej för det öppna kortet"
-                      : yourExchangeTurn && !pendingExchange ? "Välj kort att byta eller behåll handen"
+                      : yourExchangeTurn && !pendingExchange ? exchangeAllowed ? "Välj kort att byta eller behåll handen" : "Från 46 poäng får du inte byta kort"
                       : `${nextLeader?.name ?? "Nästa spelare"} byter först…`
                       : reviewingTrick ? "Nästa stick börjar snart"
                       : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} spelar…`
@@ -934,11 +948,11 @@ function Table({
                     key={card.id}
                     card={card}
                     selected={exchanging && selectedCardIds.includes(card.id)}
-                    unavailable={(exchanging && (!yourExchangeTurn || !!pendingExchange)) ||
+                    unavailable={(exchanging && (!yourExchangeTurn || !!pendingExchange || !exchangeAllowed)) ||
                       (playingTricks && (!humanTurn || !legalTrickIds.has(card.id)))}
                     onClick={
                       game.tableStage === "result" || exchangeBusy || !!exchangePlayback ||
-                      (exchanging && (!yourExchangeTurn || !!pendingExchange)) || (playingTricks && !humanTurn) ? undefined
+                      (exchanging && (!yourExchangeTurn || !!pendingExchange || !exchangeAllowed)) || (playingTricks && !humanTurn) ? undefined
                         : playingTricks ? () => {
                           if (suppressClickRef.current === card.id) { suppressClickRef.current = null; return; }
                           onPlayTrickCard(card.id);
@@ -1083,15 +1097,17 @@ export default function App() {
   }
 
   function finishHumanExchange() {
+    const score = view?.players.find((player) => player.id === viewerId)?.score ?? 0;
+    const discardIds = canExchangeCards(score) ? selectedCardIds : [];
     if (online) {
       if (busyRef.current) return;
-      void send({ type: "exchange", discardIds: selectedCardIds });
+      void send({ type: "exchange", discardIds });
       setSelectedCardIds([]);
       return;
     }
     const current = gameRef.current;
     if (!current || !viewerId || busyRef.current) return;
-    const next = applyCommand(current, { type: "exchange", actorId: viewerId, discardIds: selectedCardIds });
+    const next = applyCommand(current, { type: "exchange", actorId: viewerId, discardIds });
     if (next === current) return;
     gameRef.current = next;
     setGame(next);
@@ -1257,6 +1273,7 @@ export default function App() {
     selectedCardIds={selectedCardIds}
     onToggle={(id) => {
       if (view.activePlayerId !== viewerId) return;
+      if (!canExchangeCards(view.players.find((player) => player.id === viewerId)?.score ?? 0)) return;
       setSelectedCardIds((current) => current.includes(id)
         ? current.filter((cardId) => cardId !== id) : [...current, id]);
     }}

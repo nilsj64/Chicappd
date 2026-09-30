@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import type { GameSettings } from "./game";
 import { handCategories, handCategoryPoints } from "./poker";
 import type { HandCategory } from "./poker";
-import { canDeclareChicago, defaultSettings, finalTrickPoints } from "./scoring";
+import { canDeclareChicago, defaultSettings, finalTrickPoints, matchWinnerId } from "./scoring";
 import { correctIRLScore, createIRLGame, declareIRLChicago, finishIRLDeal, nextIRLDeal, recordFirstHands, undoIRL } from "./irl";
 import type { HandResult, IRLGame } from "./irl";
 import Brand, { BrandMark } from "./Brand";
+import { MatchPodium } from "./MatchPodium";
 import { Icon, SuitIcon } from "./Icon";
 
 const storageKey = "chicappd-irl-game";
@@ -99,6 +100,7 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
     setChicagoWon(null); setBreakerId(""); setResultError("");
   }
 
+  const matchWinner = game?.phase === "result" ? matchWinnerId(game.players) : null;
   return <div className="irl-page">
     <header className="irl-header">
       <Brand light />
@@ -132,7 +134,7 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
           <p>Givare: {game.players[(game.dealNumber - 1) % game.players.length].name}</p></div>
         {game.chicagoPlayerId && <div className="irl-chicago-active" role="status"><BrandMark /> CHICAGO · {game.players.find((p) => p.id === game.chicagoPlayerId)?.name} ska ta alla stick</div>}
         {game.phase === "hands" && <div className="irl-card">
-          <p>Efter varje av de två första bytena: välj spelaren med bäst poänggivande hand och handens kategori. Vid lika bästa hand får ingen poäng.</p>
+          <p>Efter varje av de två första bytena: välj spelaren med bäst poänggivande hand och handens kategori. Vid lika bästa hand får ingen poäng. Från 46 poäng får spelaren inte byta fysiska kort.</p>
           <HandPicker title="Efter byte 1" game={game} value={firstHands[0]} onChange={(value) => setFirstHands([value, firstHands[1]])} />
           <HandPicker title="Efter byte 2" game={game} value={firstHands[1]} onChange={(value) => setFirstHands([firstHands[0], value])} />
           <button type="button" className="button button-primary irl-primary" onClick={() => setGame(recordFirstHands(game, firstHands))}>Starta stickspelet <Icon name="arrow-right" /></button>
@@ -159,13 +161,18 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
           {resultError && <p role="alert" className="irl-error">{resultError}</p>}
           <button type="button" className="button button-primary irl-primary" onClick={finishDeal}>Räkna poäng och avsluta given <Icon name="arrow-right" /></button>
         </div>}
-        {game.phase === "result" && <div className="irl-card irl-result"><h2>Poängen är registrerade</h2>
+        {game.phase === "result" && <div className="irl-card irl-result"><h2>{matchWinner ? "Matchen är avgjord" : "Poängen är registrerade"}</h2>
+          {matchWinner && <MatchPodium players={game.players} winnerId={matchWinner} />}
           <ul>{game.lastSummary.map((item, index) => <li key={index}>{item}</li>)}</ul>
-          <button type="button" className="button button-primary irl-primary" onClick={nextDeal}>Nästa giv <Icon name="arrow-right" /></button>
+          {!matchWinner && <button type="button" className="button button-primary irl-primary" onClick={nextDeal}>Nästa giv <Icon name="arrow-right" /></button>}
         </div>}
       </section>
       <aside className="irl-side"><div className="irl-scoreboard"><span>POÄNGSTÄLLNING</span>
-        {game.players.map((player, index) => <div className="irl-score-row" key={player.id}><span>{index + 1}. {player.name}</span><strong>{player.score}</strong></div>)}
+        {game.players.map((player, index) => <div className="irl-score-row" key={player.id}><span>{index + 1}. {player.name}</span>
+          <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`} role="img"
+            aria-label={player.hasDeclaredChicago ? `${player.name} har sagt Chicago` : `${player.name} har inte sagt Chicago`}
+            title={player.hasDeclaredChicago ? "Har sagt Chicago" : "Har inte sagt Chicago"}>{player.hasDeclaredChicago ? "✓" : ""}</span>
+          <strong>{player.score}</strong></div>)}
       </div><div className="irl-tools"><button type="button" onClick={() => setGame(undoIRL(game))} disabled={!game.history.length}><Icon name="undo" /> Ångra senaste ändring</button>
         <button type="button" onClick={() => { setCorrectionId(correctionId ? null : game.players[0].id); setCorrectionReady(false); }}>Korrigera poäng</button>
         {correctionId && <div className="irl-correction"><label>Spelare<select value={correctionId} onChange={(event) => { setCorrectionId(event.target.value); setCorrectionReady(false); }}>
@@ -182,6 +189,7 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
         }}>{newMatchReady ? "Bekräfta ny match (nollställ)" : "Starta ny match"}</button>
         {newMatchReady && <button type="button" onClick={() => setNewMatchReady(false)}>Avbryt</button>}
       </div><div className="irl-rules"><strong>REGLER</strong><p>Bästa handen ger 1–8 poäng efter byte 1, byte 2 och vid givens slut. Sista sticket ger {finalTrickPoints(game.settings)} poäng.</p>
+        <p>52 poäng vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.</p>
         <p>Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15. Den som först bryter får +10.</p>
         <p>{game.settings.allowNegativeScores ? "Minuspoäng tillåts." : "Totalpoäng stannar vid 0."}</p></div></aside>
     </main>}
