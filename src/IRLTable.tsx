@@ -5,7 +5,7 @@ import type { HandCategory } from "./poker";
 import { canDeclareChicago, defaultSettings, finalTrickPoints } from "./scoring";
 import { correctIRLScore, createIRLGame, declareIRLChicago, finishIRLDeal, nextIRLDeal, recordFirstHands, undoIRL } from "./irl";
 import type { HandResult, IRLGame } from "./irl";
-import Brand from "./Brand";
+import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
 
 const storageKey = "chicappd-irl-game";
@@ -130,7 +130,7 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
       <section className="irl-main">
         <div className="irl-round-heading"><span>GIV {game.dealNumber}</span><h1>{game.phase === "hands" ? "Registrera händerna" : game.phase === "tricks" ? "Stickspelet" : "Given är klar"}</h1>
           <p>Givare: {game.players[(game.dealNumber - 1) % game.players.length].name}</p></div>
-        {game.chicagoPlayerId && <div className="irl-chicago-active" role="status"><Icon name="star" /> CHICAGO · {game.players.find((p) => p.id === game.chicagoPlayerId)?.name} ska ta alla stick</div>}
+        {game.chicagoPlayerId && <div className="irl-chicago-active" role="status"><BrandMark /> CHICAGO · {game.players.find((p) => p.id === game.chicagoPlayerId)?.name} ska ta alla stick</div>}
         {game.phase === "hands" && <div className="irl-card">
           <p>Efter varje av de två första bytena: välj spelaren med bäst poänggivande hand och handens kategori. Vid lika bästa hand får ingen poäng.</p>
           <HandPicker title="Efter byte 1" game={game} value={firstHands[0]} onChange={(value) => setFirstHands([value, firstHands[1]])} />

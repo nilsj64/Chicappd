@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420" role="img" aria-label="Chicappd card back, dark">
+ <defs>
+  <clipPath id="card"><rect x="1" y="1" width="298" height="418" rx="17"/></clipPath>
+ </defs>
+ <g clip-path="url(#card)">
+  <rect x="1" y="1" width="298" height="418" rx="17" fill="#163930"/>
+  <g fill="none" stroke="#B9CDBF" stroke-linejoin="round">
+   <rect x="9" y="9" width="282" height="402" rx="11" stroke-width="1.5"/>
+   <rect x="15" y="15" width="270" height="390" rx="6" stroke-width="0.6" opacity=".7"/>
+   <rect x="26" y="26" width="248" height="368" rx="2" stroke-width="0.8" opacity=".8"/>
+   <path d="M32 74h26 M242 74h26 M32 346h26 M242 346h26 M54 31v22 M246 31v22 M54 367v22 M246 367v22" stroke-width=".9" opacity=".8"/>
+   <circle cx="150" cy="210" r="104" stroke-width=".8" opacity=".55"/>
+   <circle cx="150" cy="210" r="99" stroke-width=".45" opacity=".55"/>
+  </g>
+  <g fill="#B9CDBF" opacity=".78">
+   <path d="M150 52l5 5-5 5-5-5z M150 358l5 5-5 5-5-5z"/>
+   <circle cx="150" cy="83" r="1.5"/><circle cx="150" cy="337" r="1.5"/>
+  </g>
+  <g transform="translate(71.8 148.5) scale(.258)">
+   <g fill="#EFF4E9"><path d="M 0,251 L 3,223 L 9,194 L 18,166 L 33,134 L 37,130 L 38,126 L 44,119 L 51,106 L 61,95 L 61,93 L 67,88 L 67,86 L 92,62 L 131,35 L 151,25 L 187,12 L 217,5 L 247,1 L 300,1 L 330,5 L 368,15 L 394,25 L 408,33 L 413,31 L 431,14 L 462,14 L 466,199 L 434,199 L 423,164 L 404,122 L 380,85 L 360,64 L 358,64 L 350,56 L 343,53 L 339,49 L 326,43 L 293,35 L 264,35 L 240,40 L 218,50 L 195,69 L 195,71 L 189,76 L 189,78 L 179,90 L 162,124 L 151,161 L 146,189 L 142,235 L 142,282 L 146,327 L 154,365 L 168,402 L 184,430 L 204,452 L 224,466 L 252,478 L 277,483 L 316,483 L 345,477 L 360,471 L 382,459 L 394,449 L 396,449 L 401,443 L 403,443 L 411,434 L 413,434 L 434,409 L 456,375 L 464,378 L 465,380 L 487,392 L 487,395 L 471,424 L 468,426 L 465,433 L 462,435 L 450,453 L 444,458 L 444,460 L 419,484 L 387,505 L 359,518 L 325,528 L 287,533 L 244,533 L 209,529 L 172,520 L 136,506 L 108,490 L 106,487 L 88,475 L 83,469 L 81,469 L 62,450 L 62,448 L 57,444 L 57,442 L 53,439 L 53,437 L 41,422 L 23,389 L 11,357 L 4,327 L 0,292 Z"/></g>
+   <g fill="#F29E7F"><circle cx="546.5" cy="466" r="63.5"/></g>
+  </g>
+ </g>
+</svg>

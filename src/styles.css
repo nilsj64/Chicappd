@@ -63,9 +63,6 @@ p {
   flex: none;
   vertical-align: middle;
 }
-.brand-logo-tile { fill: none; }
-.brand-logo-letter { fill: var(--brand-ink); }
-.brand-logo-dot { fill: var(--brand-accent); }
 .brand-mark {
   width: 34px;
   height: 34px;
@@ -277,21 +274,13 @@ p {
   top: 133px;
   left: 23%;
   transform: rotate(-24deg);
-  background: #1e5645;
+  background-color: #e7eee5;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
   border: 8px solid #faf8ee;
   outline: 1px solid #d7d1c3;
   box-shadow: 0 22px 35px #1c49362b;
-}
-.art-card-back:before {
-  content: "";
-  position: absolute;
-  inset: 10px;
-  border: 1px solid #b9cdbd;
-  border-radius: 7px;
-}
-.art-card-back .card-back-mark {
-  width: 98px;
-  height: 98px;
 }
 .art-card-heart {
   top: 134px;
@@ -1408,39 +1397,20 @@ p {
 }
 .card-center .suit-icon { width: 1em; height: 1em; }
 .card-back {
-  background: #1a5341;
-  border: 5px solid #f8f4e9;
+  background-color: #163930;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  border: 0;
   position: relative;
   display: grid;
   place-items: center;
-  color: #dce5c7;
   box-shadow: 0 8px 14px #153d3340;
 }
-.card-back:before {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border: 1px solid #bbd0b8;
-  border-radius: 3px;
-}
-.card-back-mark {
-  display: block;
-  width: 45px;
-  height: 45px;
-}
-.card-back-mark .brand-logo-tile { fill: #e8d8b8; }
 .card-small {
   width: 49px;
   height: 68px;
   border-radius: 5px;
-  border-width: 3px;
-}
-.card-small:before {
-  inset: 3px;
-}
-.card-back.card-small > .card-back-mark {
-  width: 23px;
-  height: 23px;
 }
 .playing-card.card-small {
   width: 49px;
@@ -2099,6 +2069,7 @@ input:focus-visible {
 .irl-chicago-choice, .irl-chicago-result { padding: 18px; margin-bottom: 20px; border-radius: 12px; background: #fbf1d8; }
 .irl-chicago-choice h2, .irl-chicago-result h3 { margin: 0 0 8px; }
 .irl-chicago-active { padding: 14px 18px; margin-bottom: 14px; border-radius: 12px; background: #173b34; color: #fff0c6; font-weight: 800; }
+.irl-chicago-active .brand-logo-mark { width: 1.4em; height: 1.4em; padding: 3px; margin-right: 4px; vertical-align: middle; border-radius: 4px; background: #e7eee5; }
 .irl-side { display: grid; gap: 14px; position: sticky; top: 16px; }
 .irl-scoreboard > span, .irl-rules > strong { font-size: 11px; font-weight: 800; letter-spacing: .16em; }
 .irl-score-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid #e5e4d9; font-size: 17px; }

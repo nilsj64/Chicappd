@@ -90,9 +90,8 @@ function PlayingCard({
   );
 }
 
-function CardBackMark() {
-  return <BrandMark className="card-back-mark" />;
-}
+const cardBackAsset = (appearance: "light" | "dark") =>
+  `${import.meta.env.BASE_URL}Chicappd-brand-assets/Chicappd-card-backs/card-back-${appearance}.svg`;
 
 function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string }) {
   return (
@@ -100,9 +99,8 @@ function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string 
       className={`card-back ${small ? "card-small" : ""}`}
       data-card-id={cardId}
       aria-label="Kort med baksidan uppåt"
-    >
-      <CardBackMark />
-    </div>
+      style={{ backgroundImage: `url(${cardBackAsset("dark")})` }}
+    />
   );
 }
 
@@ -173,9 +171,7 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
           <div className="art-ring art-ring-one" />
           <div className="art-ring art-ring-two" />
           <div className="art-label art-label-top">FEM KORT. ETT BORD.</div>
-          <div className="art-card art-card-back">
-            <CardBackMark />
-          </div>
+          <div className="art-card art-card-back" style={{ backgroundImage: `url(${cardBackAsset("light")})` }} />
           <div className="art-card art-card-heart">
             <span className="art-corner">
               A<br /><SuitIcon suit="hearts" />

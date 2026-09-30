@@ -2,14 +2,13 @@ import type { ReactNode } from "react";
 import type { Suit } from "./game";
 
 type IconName = "arrow-right" | "arrow-left" | "arrow-up-right" |
-  "star" | "copy" | "check" | "undo" | "plus" | "minus" | "heart";
+  "copy" | "check" | "undo" | "plus" | "minus" | "heart";
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
   const paths: Record<IconName, ReactNode> = {
     "arrow-right": <path d="M4 12h16m-6-6 6 6-6 6" />,
     "arrow-left": <path d="M20 12H4m6-6-6 6 6 6" />,
     "arrow-up-right": <path d="M5 19 19 5M8 5h11v11" />,
-    star: <path d="m12 2 3.1 6.5 7.2 1-5.2 5.1 1.2 7.2-6.3-3.4-6.3 3.4 1.2-7.2-5.2-5.1 7.2-1L12 2Z" />,
     copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
     check: <path d="m4 12 5 5L20 6" />,
     undo: <><path d="M9 7 4 12l5 5M4 12h10a6 6 0 1 1 0 12" /></>,
