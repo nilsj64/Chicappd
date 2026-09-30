@@ -16,6 +16,12 @@ export const handCategories: readonly HandCategory[] = [
   "flush", "full-house", "four-of-a-kind", "straight-flush",
 ];
 
+export const handCategoryName: Record<HandCategory, string> = {
+  "high-card": "högt kort", "one-pair": "ett par", "two-pair": "två par",
+  "three-of-a-kind": "triss", straight: "stege", flush: "färg",
+  "full-house": "kåk", "four-of-a-kind": "fyrtal", "straight-flush": "färgstege",
+};
+
 export function handCategoryPoints(category: HandCategory): number {
   return handCategories.indexOf(category);
 }
