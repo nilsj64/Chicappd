@@ -106,13 +106,15 @@ export class GameRoom extends DurableObject<Env> {
       return json({ left: true });
     }
     if (path === "/command" && request.method === "POST") {
-      const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown;
+      const input = body as { type?: unknown; discardIds?: unknown; cardId?: unknown; accept?: unknown;
         playerId?: unknown; settings?: GameSettings } | null;
       let command: GameCommand | null = null;
       if (input?.type === "start-round") command = { type: "start-round", actorId: session.playerId };
       if (input?.type === "exchange" && Array.isArray(input.discardIds) &&
         input.discardIds.length <= 5 && input.discardIds.every((id) => typeof id === "string"))
         command = { type: "exchange", actorId: session.playerId, discardIds: input.discardIds };
+      if (input?.type === "exchange-choice" && typeof input.accept === "boolean")
+        command = { type: "exchange-choice", actorId: session.playerId, accept: input.accept };
       if (input?.type === "play-card" && typeof input.cardId === "string")
         command = { type: "play-card", actorId: session.playerId, cardId: input.cardId };
       if (input?.type === "declare-chicago") command = { type: "declare-chicago", actorId: session.playerId };
@@ -128,7 +130,9 @@ export class GameRoom extends DurableObject<Env> {
       if (applied === saved.game) return json({ error: "Draget är inte tillåtet just nu.", view: this.view(saved, session.playerId) }, 409);
       const next = this.advanceBots(applied);
       saved = { ...saved, game: next };
-      if (next.waitingForNextTrick) await this.ctx.storage.setAlarm(Date.now() + 1300);
+      if (next.waitingForNextTrick || next.pendingExchange &&
+        next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
+        await this.ctx.storage.setAlarm(Date.now() + 1300);
       await this.persist(saved);
       return json({ view: this.view(saved, session.playerId) });
     }
@@ -136,9 +140,13 @@ export class GameRoom extends DurableObject<Env> {
   }
   async alarm() {
     const saved = await this.saved();
-    if (!saved?.game.waitingForNextTrick) return;
-    const next = this.advanceBots(applyCommand(saved.game, { type: "continue-trick", actorId: saved.game.ownerId }));
-    if (next.waitingForNextTrick) await this.ctx.storage.setAlarm(Date.now() + 1300);
+    if (!saved?.game.waitingForNextTrick && !saved?.game.pendingExchange) return;
+    const next = this.advanceBots(applyCommand(saved.game, {
+      type: saved.game.pendingExchange ? "advance-bot" : "continue-trick", actorId: saved.game.ownerId,
+    }));
+    if (next.waitingForNextTrick || next.pendingExchange &&
+      next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
+      await this.ctx.storage.setAlarm(Date.now() + 1300);
     if (next !== saved.game) await this.persist({ ...saved, game: next });
   }
 }

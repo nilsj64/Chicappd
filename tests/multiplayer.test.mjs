@@ -8,6 +8,12 @@ function humanRoom() {
   return applyCommand(owner, { type: "add-human", actorId: "human-a", playerId: "human-b", name: "Bo" });
 }
 
+function settleBotOffers(game) {
+  for (let i = 0; i < 12 && game.pendingExchange; i++)
+    game = applyCommand(game, { type: "advance-bot", actorId: game.ownerId });
+  return game;
+}
+
 test("human identities are distinct and lobby commands respect ownership", () => {
   assert.notEqual(createRoom("Ada", "ABCDE").ownerId, createRoom("Bo", "ABCDE").ownerId);
   const room = humanRoom();
@@ -66,6 +72,8 @@ test("human exchanges wait for every human and reject duplicates or invalid card
   assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "stranger", discardIds: [] }), game);
   assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [beforeB[0].id] }), game);
   game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [game.players[0].hand[0].id] });
+  assert.equal(game.pendingExchange.playerId, "human-a");
+  game = applyCommand(game, { type: "exchange-choice", actorId: "human-a", accept: true });
   assert.equal(game.exchangeCount, 0);
   assert.deepEqual(game.exchangeSubmittedPlayerIds, ["human-a"]);
   assert.deepEqual(game.players[1].hand, beforeB);
@@ -76,12 +84,47 @@ test("human exchanges wait for every human and reject duplicates or invalid card
   assert.equal(game.handAwards.length, 1);
 });
 
+for (const accept of [true, false]) {
+  test(`single-card exchange shows the first card to everyone, then ${accept ? "accepts it" : "deals a hidden replacement"}`, () => {
+    let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
+    const discarded = game.players[0].hand[0];
+    const shown = game.deck[0];
+    const reserve = game.deck[1];
+    game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [discarded.id] });
+    assert.equal(game.pendingExchange.card.id, shown.id);
+    assert.deepEqual(game.players[0].hand.map((card) => card.id).includes(discarded.id), true);
+    assert.equal(game.exchangeEvents.length, 0);
+    assert.equal(game.activePlayerId, "human-a");
+    for (const viewer of ["human-a", "human-b"]) {
+      const view = viewForPlayer(game, viewer);
+      assert.equal(view.pendingExchange.card.id, shown.id);
+      assert.equal(JSON.stringify(view).includes(reserve.id), false);
+      assert.equal(view.players.find((player) => player.id !== viewer).hand.length, 0);
+      assert.equal("discardId" in view.pendingExchange, false);
+    }
+    assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] }), game);
+    assert.strictEqual(applyCommand(game, { type: "exchange-choice", actorId: "human-b", accept }), game);
+    game = applyCommand(game, { type: "exchange-choice", actorId: "human-a", accept });
+    assert.equal(game.pendingExchange, null);
+    assert.equal(game.activePlayerId, "human-b");
+    assert.equal(game.exchangeEvents.length, 1);
+    assert.ok(game.discard.some((card) => card.id === discarded.id));
+    assert.equal(game.players[0].hand.some((card) => card.id === (accept ? shown.id : reserve.id)), true);
+    assert.equal(game.players[0].hand.some((card) => card.id === (accept ? reserve.id : shown.id)), false);
+    assert.equal(game.discard.some((card) => card.id === shown.id), !accept);
+    assert.strictEqual(applyCommand(game, { type: "exchange-choice", actorId: "human-a", accept: true }), game);
+    assert.equal(JSON.stringify(viewForPlayer(game, "human-b")).includes(reserve.id), false);
+  });
+}
+
 test("exchange events follow seat order and scoring closes each exchange before the next", () => {
   let game = applyCommand(humanRoom(), { type: "add-bot", actorId: "human-a" });
   game = applyCommand(game, { type: "start-round", actorId: "human-a" });
   assert.strictEqual(applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] }), game);
   const hiddenCard = game.players[0].hand[0].id;
   game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [hiddenCard] });
+  assert.equal(game.pendingExchange.card.id, game.deck[0].id);
+  game = applyCommand(game, { type: "exchange-choice", actorId: "human-a", accept: true });
   assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["human-a"]);
   game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
   assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["human-a", "human-b", "demo-1"]);
@@ -131,7 +174,7 @@ test("bot starter and bot exchanges are shared public events in clockwise order"
   for (let i = 0; i < 3; i++) game = applyCommand(game, { type: "add-bot", actorId: "human-a" });
   game = applyCommand(game, { type: "start-round", actorId: "human-a" });
   for (let exchange = 0; exchange < 3; exchange++)
-    game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+    game = settleBotOffers(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] }));
   while (game.tableStage !== "result") {
     const actor = game.players.find((p) => p.id === game.activePlayerId);
     game = applyCommand(game, { type: "advance-bot", actorId: "human-a" });
@@ -142,16 +185,16 @@ test("bot starter and bot exchanges are shared public events in clockwise order"
     if (game.waitingForNextTrick)
       game = applyCommand(game, { type: "continue-trick", actorId: "human-a" });
   }
-  game = applyCommand(game, { type: "start-round", actorId: "human-a" });
+  game = settleBotOffers(applyCommand(game, { type: "start-round", actorId: "human-a" }));
   assert.equal(game.roundStarterId, "demo-1");
   assert.deepEqual(game.exchangeEvents.map((event) => event.playerId), ["demo-1", "demo-2", "demo-3"]);
   assert.equal(game.activePlayerId, "human-a");
-  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  game = settleBotOffers(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] }));
   assert.deepEqual(game.exchangeEvents.slice(0, 4).map((event) => event.playerId),
     ["demo-1", "demo-2", "demo-3", "human-a"]);
   assert.match(game.activity.at(4), /efter byte 1/);
   for (let exchange = 0; exchange < 2; exchange++)
-    game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+    game = settleBotOffers(applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] }));
   assert.equal(game.tableStage, "tricks");
   assert.equal(game.activePlayerId, "demo-1");
 });

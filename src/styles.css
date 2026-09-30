@@ -1110,6 +1110,29 @@ p {
   justify-content: center;
   gap: 24px;
 }
+.exchange-offer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: #f2e4bd;
+  font-size: 12px;
+  text-align: center;
+}
+.exchange-offer .playing-card { cursor: default; }
+.exchange-offer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.exchange-offer-actions span { width: 100%; }
+.exchange-offer-actions button {
+  border: 1px solid #f2e4bd;
+  border-radius: 8px;
+  background: #f2e4bd;
+  color: #173e35;
+  padding: 7px 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.exchange-offer-actions button:disabled { opacity: .5; cursor: default; }
 .stack-group {
   display: flex;
   flex-direction: column;

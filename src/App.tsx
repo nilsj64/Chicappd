@@ -683,6 +683,7 @@ function Table({
   onToggle,
   onExchange,
   onKeep,
+  onExchangeChoice,
   exchangeBusy,
   visibleDiscard,
   onPlayTrickCard,
@@ -701,6 +702,7 @@ function Table({
   onToggle: (id: string) => void;
   onExchange: () => void;
   onKeep: () => void;
+  onExchangeChoice: (accept: boolean) => void;
   exchangeBusy: boolean;
   visibleDiscard: number;
   onPlayTrickCard: (id: string, from?: CardFlight["from"]) => void;
@@ -718,6 +720,8 @@ function Table({
   const opponents = game.players.filter((player) => player.id !== viewerId);
   const exchanging = game.tableStage === "exchange";
   const yourExchangeTurn = exchanging && game.activePlayerId === local.id;
+  const pendingExchange = game.pendingExchange;
+  const yourChoice = pendingExchange?.playerId === viewerId;
   const playingTricks = game.tableStage === "tricks";
   const reviewingTrick = playingTricks && game.waitingForNextTrick;
   const humanTurn = playingTricks && game.activePlayerId === local.id && !reviewingTrick && !flight;
@@ -796,7 +800,7 @@ function Table({
   const handAction = <button
     className="hand-action"
     onClick={selectionCount ? onExchange : onKeep}
-    disabled={exchangeBusy || !!exchangePlayback || !yourExchangeTurn}
+    disabled={exchangeBusy || !!exchangePlayback || !yourExchangeTurn || !!pendingExchange}
   >
     {selectionCount ? `Byt ${selectionCount} kort`
       : "Behåll handen"}
@@ -860,6 +864,16 @@ function Table({
                   <DiscardPile count={visibleDiscard} />
                 </div>
               </div>
+              {pendingExchange && <div className="exchange-offer" aria-live="polite">
+                <strong>{game.players.find((player) => player.id === pendingExchange.playerId)?.name} byter ett kort</strong>
+                <span>Första nya kortet</span>
+                <PlayingCard card={pendingExchange.card} />
+                {yourChoice ? <div className="exchange-offer-actions">
+                  <span>Vill du ha det visade kortet?</span>
+                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(true)}>Ja</button>
+                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(false)}>Nej</button>
+                </div> : <span>Väntar på svar…</span>}
+              </div>}
               </> : <div className="trick-view" aria-live="polite">
                 {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
@@ -903,7 +917,8 @@ function Table({
                     {local.name} <em>DU</em> <span className="table-player-score">{local.score} p</span>
                   </strong>
                   {game.tableStage !== "result" && <small>
-                    {exchanging ? yourExchangeTurn ? "Välj kort att byta eller behåll handen"
+                    {exchanging ? yourChoice ? "Välj Ja eller Nej för det öppna kortet"
+                      : yourExchangeTurn && !pendingExchange ? "Välj kort att byta eller behåll handen"
                       : `${nextLeader?.name ?? "Nästa spelare"} byter först…`
                       : reviewingTrick ? "Nästa stick börjar snart"
                       : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} spelar…`
@@ -919,11 +934,11 @@ function Table({
                     key={card.id}
                     card={card}
                     selected={exchanging && selectedCardIds.includes(card.id)}
-                    unavailable={(exchanging && !yourExchangeTurn) ||
+                    unavailable={(exchanging && (!yourExchangeTurn || !!pendingExchange)) ||
                       (playingTricks && (!humanTurn || !legalTrickIds.has(card.id)))}
                     onClick={
                       game.tableStage === "result" || exchangeBusy || !!exchangePlayback ||
-                      (exchanging && !yourExchangeTurn) || (playingTricks && !humanTurn) ? undefined
+                      (exchanging && (!yourExchangeTurn || !!pendingExchange)) || (playingTricks && !humanTurn) ? undefined
                         : playingTricks ? () => {
                           if (suppressClickRef.current === card.id) { suppressClickRef.current = null; return; }
                           onPlayTrickCard(card.id);
@@ -1083,6 +1098,14 @@ export default function App() {
     setSelectedCardIds([]);
   }
 
+  function answerHumanExchange(accept: boolean) {
+    if (online) { void send({ type: "exchange-choice", accept }); return; }
+    const current = gameRef.current;
+    if (!current || !viewerId || busyRef.current) return;
+    const next = applyCommand(current, { type: "exchange-choice", actorId: viewerId, accept });
+    if (next !== current) { gameRef.current = next; setGame(next); }
+  }
+
   function playOneCard(next: GameState, from: CardFlight["from"] | null) {
     const previous = gameRef.current;
     if (!previous || next === previous) return;
@@ -1108,6 +1131,14 @@ export default function App() {
     const origin = from ?? cardOrigin(`.your-hand [data-card-id="${cardId}"]`);
     playOneCard(applyCommand(current, { type: "play-card", actorId: viewerId, cardId }), origin);
   }
+
+  useEffect(() => {
+    if (online || !game?.pendingExchange ||
+      game.players.find((player) => player.id === game.pendingExchange?.playerId)?.control !== "bot") return;
+    const timer = window.setTimeout(() => setGame((current) => current
+      ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), BOT_PAUSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [game?.pendingExchange, online]);
 
   useEffect(() => {
     if (online || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
@@ -1231,6 +1262,7 @@ export default function App() {
     }}
     onExchange={finishHumanExchange}
     onKeep={finishHumanExchange}
+    onExchangeChoice={answerHumanExchange}
     exchangeBusy={busy || view.activePlayerId !== viewerId}
     visibleDiscard={view.discardCount}
     onPlayTrickCard={playHumanCard}

@@ -47,6 +47,7 @@ export type GameSettings = { finalTrickPoints: 2 | 5; allowNegativeScores: boole
 export type ChicagoAward = { playerId: string; points: 15 | -15 };
 export type ExchangeFeedback = { exchangeCount: 1 | 2 | 3; changedCards: number };
 export type ExchangeEvent = { id: number; exchangeCount: 1 | 2 | 3; playerId: string; changedCards: number };
+export type PendingExchange = { playerId: string; discardId: string; card: Card };
 export type GameState = {
   roomCode: string;
   ownerId: string;
@@ -63,6 +64,7 @@ export type GameState = {
   exchangeCount: ExchangeCount;
   exchangeSubmittedPlayerIds: string[];
   exchangeFeedback: ExchangeFeedback | null;
+  pendingExchange: PendingExchange | null;
   handAwards: HandAward[];
   finalHands: Record<string, Card[]> | null;
   finalTrickAward: TrickAward | null;
@@ -141,6 +143,7 @@ export function createRoom(
     exchangeCount: 0,
     exchangeSubmittedPlayerIds: [],
     exchangeFeedback: null,
+    pendingExchange: null,
     handAwards: [],
     finalHands: null,
     finalTrickAward: null,
@@ -204,6 +207,7 @@ export function startRound(game: GameState): GameState {
     exchangeCount: 0,
     exchangeSubmittedPlayerIds: [],
     exchangeFeedback: null,
+    pendingExchange: null,
     handAwards: [],
     finalHands: null,
     finalTrickAward: null,
@@ -226,6 +230,7 @@ function returnToLobby(game: GameState): GameState {
     exchangeEvents: [],
     selectedCardIds: [], exchangeCount: 0, exchangeSubmittedPlayerIds: [],
     exchangeFeedback: null, handAwards: [], finalHands: null, finalTrickAward: null,
+    pendingExchange: null,
     chicagoPlayerId: null, chicagoBreakerId: null, chicagoAward: null,
     activity: [], currentTrick: [], completedTricks: [],
     waitingForNextTrick: false, trickError: null,
@@ -335,10 +340,23 @@ function exchangePlayerCards(
 }
 
 function submitExchange(game: GameState, playerId: string, discardedIds: readonly string[]): GameState {
-  if (!canFinishExchange(game) || game.activePlayerId !== playerId ||
+  if (game.pendingExchange || !canFinishExchange(game) || game.activePlayerId !== playerId ||
     game.exchangeSubmittedPlayerIds.includes(playerId)) return game;
+  if (discardedIds.length === 1) {
+    const player = game.players.find((candidate) => candidate.id === playerId);
+    if (!player?.hand.some((card) => card.id === discardedIds[0])) return game;
+    const deck = game.deck.length >= 2 ? game.deck : [...game.deck, ...shuffled(game.discard)];
+    if (deck.length < 2) return game;
+    return { ...game, deck, discard: game.deck.length >= 2 ? game.discard : [],
+      pendingExchange: { playerId, discardId: discardedIds[0], card: deck[0] },
+      selectedCardIds: [] };
+  }
   const exchanged = exchangePlayerCards(game, playerId, discardedIds);
   if (exchanged === game) return game;
+  return finishExchange(game, exchanged, playerId, discardedIds.length);
+}
+
+function finishExchange(game: GameState, exchanged: GameState, playerId: string, changedCards: number): GameState {
   const playerIndex = game.players.findIndex((player) => player.id === playerId);
   const player = game.players[playerIndex];
   const exchangeCount = nextExchangeCount(game.exchangeCount);
@@ -348,12 +366,12 @@ function submitExchange(game: GameState, playerId: string, discardedIds: readonl
     exchangeSubmittedPlayerIds: submitted,
     exchangeEventSerial: (game.exchangeEventSerial ?? 0) + 1,
     exchangeEvents: [...(game.exchangeEvents ?? []), {
-      id: (game.exchangeEventSerial ?? 0) + 1, exchangeCount, playerId, changedCards: discardedIds.length,
+      id: (game.exchangeEventSerial ?? 0) + 1, exchangeCount, playerId, changedCards,
     }],
     activePlayerId: game.players[(playerIndex + 1) % game.players.length].id,
     selectedCardIds: [],
-    activity: [...game.activity, `Byte ${exchangeCount}: ${player.name} ${discardedIds.length
-      ? `byter ${discardedIds.length} kort` : "behåller handen"}`],
+    activity: [...game.activity, `Byte ${exchangeCount}: ${player.name} ${changedCards
+      ? `byter ${changedCards} kort` : "behåller handen"}`],
   };
   if (submitted.length < game.players.length) return next;
   next = { ...next, exchangeSubmittedPlayerIds: [], exchangeCount,
@@ -368,9 +386,27 @@ function submitExchange(game: GameState, playerId: string, discardedIds: readonl
   };
 }
 
+function answerExchange(game: GameState, playerId: string, accept: boolean): GameState {
+  const pending = game.pendingExchange;
+  if (!pending || pending.playerId !== playerId || game.activePlayerId !== playerId ||
+    game.deck[0]?.id !== pending.card.id) return game;
+  const ready = accept ? { ...game, pendingExchange: null } : {
+    ...game, pendingExchange: null,
+    deck: game.deck.slice(1), discard: [...game.discard, pending.card],
+  };
+  return submitAcceptedSingle(ready, playerId, pending.discardId);
+}
+
+function submitAcceptedSingle(game: GameState, playerId: string, discardId: string): GameState {
+  // Complete the ordinary exchange without offering the replacement a second time.
+  const exchanged = exchangePlayerCards(game, playerId, [discardId]);
+  if (exchanged === game) return game;
+  return finishExchange(game, exchanged, playerId, 1);
+}
+
 function runExchangeBots(game: GameState): GameState {
   let next = game;
-  for (let turn = 0; turn < 12 && next.tableStage === "exchange"; turn++) {
+  for (let turn = 0; turn < 12 && next.tableStage === "exchange" && !next.pendingExchange; turn++) {
     const bot = next.players.find((player) => player.id === next.activePlayerId);
     if (!bot || bot.control !== "bot") break;
     const advanced = submitExchange(next, bot.id, chooseBotDiscards(bot.hand));
@@ -570,6 +606,7 @@ export type GameCommand =
   | { type: "start-round"; actorId: string }
   | { type: "return-lobby"; actorId: string }
   | { type: "exchange"; actorId: string; discardIds: string[] }
+  | { type: "exchange-choice"; actorId: string; accept: boolean }
   | { type: "play-card"; actorId: string; cardId: string }
   | { type: "advance-bot"; actorId: string }
   | { type: "continue-trick"; actorId: string };
@@ -623,17 +660,26 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
       const exchanged = submitExchange(game, actor.id, command.discardIds);
       return exchanged === game ? game : runExchangeBots(exchanged);
     }
+    case "exchange-choice": {
+      if (typeof command.accept !== "boolean" || actor.id !== game.pendingExchange?.playerId ||
+        game.phase !== "table" || game.tableStage !== "exchange") return game;
+      const answered = answerExchange(game, actor.id, command.accept);
+      return answered === game ? game : runExchangeBots(answered);
+    }
     case "play-card":
       return actor.id === game.activePlayerId && game.phase === "table" ? playCard(game, actor.id, command.cardId) : game;
     case "advance-bot":
-      return command.actorId === game.ownerId ? playNextDemoTrickCard(game) : game;
+      if (command.actorId !== game.ownerId) return game;
+      if (game.pendingExchange && game.players.find((p) => p.id === game.pendingExchange?.playerId)?.control === "bot")
+        return runExchangeBots(answerExchange(game, game.pendingExchange.playerId, true));
+      return playNextDemoTrickCard(game);
     case "continue-trick":
       return command.actorId === game.ownerId ? continueAfterTrickOnce(game) : game;
   }
 }
 
 export type PlayerView = Omit<Player, "hand"> & { hand: Card[]; handCount: number };
-export type GameView = Omit<GameState, "deck" | "discard" | "players" | "finalHands" | "selectedCardIds" | "trickError" | "exchangeFeedback"> & {
+export type GameView = Omit<GameState, "deck" | "discard" | "players" | "finalHands" | "selectedCardIds" | "trickError" | "exchangeFeedback" | "pendingExchange"> & {
   players: PlayerView[];
   deckCount: number;
   discardCount: number;
@@ -641,6 +687,7 @@ export type GameView = Omit<GameState, "deck" | "discard" | "players" | "finalHa
   selectedCardIds: string[];
   trickError: string | null;
   exchangeFeedback: ExchangeFeedback | null;
+  pendingExchange: { playerId: string; card: Card } | null;
 };
 
 /** Construct explicitly so new authority fields cannot silently enter client snapshots. */
@@ -657,6 +704,9 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
     exchangeEventSerial: game.exchangeEventSerial ?? 0,
     exchangeEvents: (game.exchangeEvents ?? []).map((event) => ({ ...event })),
     exchangeSubmittedPlayerIds: [...game.exchangeSubmittedPlayerIds], exchangeFeedback: null,
+    pendingExchange: game.pendingExchange ? {
+      playerId: game.pendingExchange.playerId, card: { ...game.pendingExchange.card },
+    } : null,
     handAwards: game.handAwards.map((award) => ({ ...award, evaluations: revealed ? award.evaluations : {} })),
     finalTrickAward: game.finalTrickAward, activity: [...game.activity],
     settings: game.settings ?? { finalTrickPoints: 5, allowNegativeScores: false },

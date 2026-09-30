@@ -26,6 +26,50 @@ async function until(predicate, timeout = 3000) {
   }
 }
 
+test("single-card choice is shared online while the rejected replacement stays private", async () => {
+  const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
+  const code = owner.view.roomCode;
+  const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bo" } });
+  try {
+    let view = (await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "start-round" } })).view;
+    const initialOwnerIds = new Set(view.players[0].hand.map((card) => card.id));
+    const discarded = view.players[0].hand[0].id;
+    view = (await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "exchange", discardIds: [discarded] } })).view;
+    const shown = view.pendingExchange.card.id;
+    const guestView = (await call(`/rooms/${code}/state`, { token: guest.token })).view;
+    assert.equal(guestView.pendingExchange.card.id, shown);
+    assert.equal(guestView.players[0].hand.length, 0);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "exchange-choice", accept: true } })).status, 409);
+    const rejected = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "exchange-choice", accept: false } });
+    assert.equal(rejected.status, 200);
+    assert.equal(rejected.view.pendingExchange, null);
+    assert.equal(rejected.view.players[0].hand.some((card) => card.id === shown), false);
+    const hidden = rejected.view.players[0].hand.find((card) => !initialOwnerIds.has(card.id));
+    assert.ok(hidden);
+    const guestAfter = (await call(`/rooms/${code}/state`, { token: guest.token })).view;
+    assert.equal(JSON.stringify(guestAfter).includes(hidden.id), false);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
+      body: { type: "exchange-choice", accept: true } })).status, 409);
+    const guestCard = guestAfter.players[1].hand[0].id;
+    const offered = await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "exchange", discardIds: [guestCard] } });
+    assert.equal(offered.status, 200);
+    assert.equal((await call(`/rooms/${code}/state`, { token: owner.token })).view.pendingExchange.card.id,
+      offered.view.pendingExchange.card.id);
+    const accepted = await call(`/rooms/${code}/command`, { method: "POST", token: guest.token,
+      body: { type: "exchange-choice", accept: true } });
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.view.players[1].hand.some((card) => card.id === offered.view.pendingExchange.card.id), true);
+  } finally {
+    await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token });
+    await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token });
+  }
+});
+
 async function finishRoomWithBots(code, seats) {
   const byId = new Map(seats.map((seat) => [seat.playerId, seat]));
   for (let turn = 0; turn < 150; turn++) {

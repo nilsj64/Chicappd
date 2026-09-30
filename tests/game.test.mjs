@@ -6,8 +6,9 @@ import {
   createDeck,
   startRound,
   toggleCard,
-  exchangeSelectedCards,
-  keepHand,
+  exchangeSelectedCards as exchangeSelectedCardsStep,
+  keepHand as keepHandStep,
+  applyCommand,
   selectTrickCard,
   playSelectedTrickCard,
   playSelectedTrickCardOnce,
@@ -28,6 +29,18 @@ const S = "spades",
   H = "hearts",
   D = "diamonds",
   C = "clubs";
+
+function settleOffers(game) {
+  for (let i = 0; i < 12 && game.pendingExchange; i++) {
+    const pending = game.pendingExchange;
+    game = pending.playerId === game.ownerId
+      ? applyCommand(game, { type: "exchange-choice", actorId: pending.playerId, accept: true })
+      : applyCommand(game, { type: "advance-bot", actorId: game.ownerId });
+  }
+  return game;
+}
+const exchangeSelectedCards = (game) => settleOffers(exchangeSelectedCardsStep(game));
+const keepHand = (game) => settleOffers(keepHandStep(game));
 
 const examples = [
   ["high-card", hand(["A", S], ["J", H], ["9", D], ["6", C], ["3", S])],
