@@ -19,6 +19,11 @@ export function matchWinnerId(players: readonly { id: string; score: number; has
   return leaders.length === 1 ? leaders[0].id : null;
 }
 
+/** Equal scores retain seat order; never mutate the playing order. */
+export function scoreStandings<T extends { score: number }>(players: readonly T[]): T[] {
+  return [...players].sort((left, right) => right.score - left.score || players.indexOf(left) - players.indexOf(right));
+}
+
 export function matchStandings<T extends { id: string; score: number }>(players: readonly T[], winnerId: string): T[] {
   return [...players].sort((left, right) =>
     (left.id === winnerId ? -1 : right.id === winnerId ? 1 : 0) || right.score - left.score ||

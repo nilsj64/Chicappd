@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCommand, createDeck, createRoom, startRound, viewForPlayer } from "../src/game.ts";
+import { applyCommand, createDeck, createRoom, startRound, viewForPlayer, canPlayerDeclareChicago } from "../src/game.ts";
 
 function setup(winningChicago = false) {
   let game = createRoom("Ada", "ABCDE", "ada");
@@ -38,11 +38,12 @@ test("Chicago requires 15 current points, including exactly 15", () => {
   assert.strictEqual(applyCommand(low, { type: "declare-chicago", actorId: "ada" }), low);
   game = applyCommand(game, { type: "declare-chicago", actorId: "ada" });
   assert.equal(game.chicagoPlayerId, "ada");
-  assert.equal(game.players[0].hasDeclaredChicago, true);
-  assert.equal(viewForPlayer(game, "bea").players[0].hasDeclaredChicago, true);
+  assert.equal(game.players[0].hasDeclaredChicago, false);
+  assert.equal(viewForPlayer(game, "bea").players[0].hasDeclaredChicago, false);
   assert.equal(viewForPlayer(game, "bea").chicagoPlayerId, "ada");
   assert.strictEqual(applyCommand(game, { type: "declare-chicago", actorId: "bea" }), game);
   const started = applyCommand(game, { type: "play-card", actorId: "ada", cardId: game.players[0].hand[0].id });
+  assert.equal(started.players[0].hasDeclaredChicago, true);
   assert.strictEqual(applyCommand(started, { type: "declare-chicago", actorId: "bea" }), started);
 });
 
@@ -95,4 +96,34 @@ test("negative-score setting applies to Chicago and 2/5 remains final-trick scor
   assert.equal(normal.chicagoAward, null);
   assert.equal(normal.chicagoBreakerId, null);
   assert.equal(normal.players[1].score, 2);
+});
+
+
+test("Chicago is available off-turn and priority follows the rotated starter, independent of arrival order", () => {
+  let room = createRoom("Ada", "ABCDE", "ada");
+  for (const id of ["bea", "cid", "dan"]) room = applyCommand(room, { type: "add-human", actorId: "ada", playerId: id, name: id });
+  const base = { ...startRound(room), tableStage: "tricks", exchangeCount: 3, roundStarterId: "cid", activePlayerId: "cid" };
+  base.players = base.players.map((player) => ({ ...player, score: 15 }));
+  for (const order of [["ada", "dan", "bea", "cid"], ["cid", "bea", "dan", "ada"], ["bea", "ada", "cid", "dan"]]) {
+    let game = base;
+    assert.equal(canPlayerDeclareChicago(viewForPlayer(game, "ada"), "ada"), true);
+    for (const id of order) game = applyCommand(game, { type: "declare-chicago", actorId: id });
+    assert.equal(game.chicagoPlayerId, "cid");
+    assert.equal(game.activePlayerId, "cid");
+    game = applyCommand(game, { type: "play-card", actorId: "cid", cardId: game.players[2].hand[0].id });
+    assert.deepEqual(game.players.filter((player) => player.hasDeclaredChicago).map((player) => player.id), ["cid"]);
+    assert.equal(canPlayerDeclareChicago(game, "ada"), false);
+    assert.strictEqual(applyCommand(game, { type: "declare-chicago", actorId: "ada" }), game);
+  }
+  // Without a claim from the starter, the next seat wins, including wraparound.
+  for (const order of [["bea", "ada", "dan"], ["dan", "ada", "bea"]]) {
+    let game = base;
+    for (const id of order) game = applyCommand(game, { type: "declare-chicago", actorId: id });
+    assert.equal(game.chicagoPlayerId, "dan");
+  }
+  const historic = { ...base, players: base.players.map((p) => p.id === "ada" ? { ...p, hasDeclaredChicago: true } : p) };
+  let game = applyCommand(historic, { type: "declare-chicago", actorId: "ada" });
+  game = applyCommand(game, { type: "declare-chicago", actorId: "cid" });
+  game = applyCommand(game, { type: "play-card", actorId: "cid", cardId: game.players[2].hand[0].id });
+  assert.equal(game.players[0].hasDeclaredChicago, true);
 });

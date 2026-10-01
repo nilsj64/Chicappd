@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCommand, createRoom, viewForPlayer } from "../src/game.ts";
+import { applyCommand, createRoom, createDeck, viewForPlayer } from "../src/game.ts";
 import { legalCards } from "../src/tricks.ts";
-import { matchStandings, matchWinnerId } from "../src/scoring.ts";
+import { matchStandings, matchWinnerId, scoreStandings } from "../src/scoring.ts";
 
 function humanRoom() {
   const owner = createRoom("Ada", "ABCDE", "human-a");
@@ -363,4 +363,54 @@ test("only a player with a past Chicago declaration can finish at 52", () => {
   assert.strictEqual(applyCommand(declared, { type: "start-round", actorId: "human-a" }), declared);
   assert.deepEqual(matchStandings([{ id: "b", score: 50 }, { id: "a", score: 52 }, { id: "c", score: 40 }], "a")
     .map((player) => player.id), ["a", "b", "c"]);
+});
+
+
+test("all exchange-locked players automatically reach tricks with scoring and the rotated starter intact", () => {
+  for (const score of [46, 47]) {
+    for (const bots of [false, true]) {
+      let room = humanRoom();
+      if (bots) room = applyCommand(room, { type: "add-bot", actorId: "human-a" });
+      room = { ...room, roundStarterId: "human-a", players: room.players.map((player) => ({ ...player, score })) };
+      const game = applyCommand(room, { type: "start-round", actorId: "human-a" });
+      assert.equal(game.tableStage, "tricks");
+      assert.equal(game.exchangeCount, 3);
+      assert.equal(game.activePlayerId, "human-b");
+      assert.equal(game.roundStarterId, "human-b");
+      assert.equal(game.pendingExchange, null);
+      assert.deepEqual(game.exchangeSubmittedPlayerIds, []);
+      assert.equal(game.exchangeEvents.length, game.players.length * 3);
+      assert.ok(game.exchangeEvents.every((event) => event.changedCards === 0));
+      assert.equal(game.handAwards.length, 2);
+      assert.equal(game.discard.length, 0);
+      assert.equal(game.deck.length, 52 - game.players.length * 5);
+      assert.deepEqual(game.finalHands, Object.fromEntries(game.players.map((p) => [p.id, p.hand])));
+      assert.equal(game.currentTrick.length, 0);
+    }
+  }
+});
+
+test("remaining exchanges skip automatically when the last eligible player reaches 46 through poker scoring", () => {
+  let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
+  game = { ...game, players: game.players.map((player, index) => ({ ...player, score: index ? 47 : 45,
+    hand: index ? ["2", "4", "6", "8", "10"].map((rank) => ({ id: `hearts-${rank}`, rank, suit: "hearts" }))
+      : ["10", "J", "Q", "K", "A"].map((rank) => ({ id: `spades-${rank}`, rank, suit: "spades" })) })) };
+  const held = new Set(game.players.flatMap((p) => p.hand.map((c) => c.id)));
+  game.deck = createDeck().filter((card) => !held.has(card.id));
+  game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
+  assert.equal(game.tableStage, "exchange");
+  game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
+  assert.equal(game.tableStage, "tricks");
+  assert.equal(game.handAwards.length, 2);
+  assert.equal(game.activePlayerId, "human-a");
+});
+
+test("score standings update with totals and retain seat order on ties without changing play order", () => {
+  const players = [{ id: "a", score: 10 }, { id: "b", score: 20 }, { id: "c", score: 20 }];
+  assert.deepEqual(scoreStandings(players).map((p) => p.id), ["b", "c", "a"]);
+  players[0].score = 25;
+  assert.deepEqual(scoreStandings(players).map((p) => p.id), ["a", "b", "c"]);
+  players[0].score = 20;
+  assert.deepEqual(scoreStandings(players).map((p) => p.id), ["a", "b", "c"]);
+  assert.deepEqual(players.map((p) => p.id), ["a", "b", "c"]);
 });

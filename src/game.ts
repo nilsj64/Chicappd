@@ -80,6 +80,22 @@ export type GameState = {
   trickError: string | null;
 };
 
+/** Chicago stays open until the first card; a higher-priority claimant may take over. */
+export function canPlayerDeclareChicago(
+  game: Pick<GameState, "phase" | "tableStage" | "currentTrick" | "completedTricks" | "roundStarterId" | "activePlayerId" | "chicagoPlayerId"> & {
+    players: readonly { id: string; score: number }[];
+  }, playerId: string,
+): boolean {
+  const player = game.players.find((candidate) => candidate.id === playerId);
+  if (!player || !canDeclareChicago(player.score) || game.phase !== "table" ||
+    game.tableStage !== "tricks" || game.currentTrick.length || game.completedTricks.length) return false;
+  if (!game.chicagoPlayerId) return true;
+  const starter = game.players.findIndex((candidate) => candidate.id === (game.roundStarterId ?? game.activePlayerId));
+  const priority = (id: string) =>
+    (game.players.findIndex((candidate) => candidate.id === id) - Math.max(0, starter) + game.players.length) % game.players.length;
+  return priority(playerId) < priority(game.chicagoPlayerId);
+}
+
 export function playedCardsForPlayer(game: Pick<GameState, "completedTricks" | "currentTrick">, playerId: string): Card[] {
   return [
     ...game.completedTricks.flatMap((trick) =>
@@ -421,7 +437,8 @@ function runExchangeBots(game: GameState): GameState {
       continue;
     }
     const bot = next.players.find((player) => player.id === next.activePlayerId);
-    if (!bot || bot.control !== "bot") break;
+    // If nobody may exchange, also advance human seats through ordinary scoring.
+    if (!bot || (bot.control !== "bot" && next.players.some((player) => canExchangeCards(player.score)))) break;
     const advanced = submitExchange(next, bot.id, canExchangeCards(bot.score) ? chooseBotDiscards(bot.hand) : []);
     if (advanced === next) break;
     next = advanced;
@@ -484,6 +501,15 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
   if (!legalCards(player.hand, ledSuit).some((candidate) => candidate.id === cardId))
     return game;
 
+  // Only the final claimant receives the historical Chicago qualification.
+  if (!game.currentTrick.length && !game.completedTricks.length && game.chicagoPlayerId) {
+    const declarer = game.players.find((candidate) => candidate.id === game.chicagoPlayerId)!;
+    game = { ...game,
+      players: game.players.map((candidate) => candidate.id === declarer.id
+        ? { ...candidate, hasDeclaredChicago: true } : candidate),
+      activity: [...game.activity, `${declarer.name} säger Chicago – måste vinna alla stick`],
+    };
+  }
   const cards = [...game.currentTrick, { playerId, card }];
   const players = game.players.map((candidate) =>
     candidate.id === playerId
@@ -638,11 +664,8 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
           ...player, score: scoreAfter(player.score, 0, command.settings),
         })) };
     case "declare-chicago":
-      if (game.phase !== "table" || game.tableStage !== "tricks" ||
-        game.currentTrick.length || game.completedTricks.length || game.chicagoPlayerId || !canDeclareChicago(actor.score)) return game;
-      return { ...game, chicagoPlayerId: actor.id,
-        players: game.players.map((player) => player.id === actor.id ? { ...player, hasDeclaredChicago: true } : player),
-        activity: [...game.activity, `${actor.name} säger Chicago – måste vinna alla stick`] };
+      if (!canPlayerDeclareChicago(game, actor.id)) return game;
+      return { ...game, chicagoPlayerId: actor.id };
     case "add-human":
       if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= 4 ||
         typeof command.playerId !== "string" || !command.playerId || typeof command.name !== "string" ||

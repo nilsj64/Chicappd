@@ -4,6 +4,7 @@ import { evaluateHand, handCategoryName } from "./poker";
 import type { Card, ExchangeEvent, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
+  canPlayerDeclareChicago,
   createRoom,
   randomRoomCode,
   suitName,
@@ -18,7 +19,7 @@ import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
-import { canExchangeCards, matchWinnerId } from "./scoring";
+import { canExchangeCards, matchWinnerId, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
@@ -643,7 +644,7 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
         <span><BrandMark /></span>
       </div>
       <div className="score-list">
-        {players.map((player, index) => (
+        {scoreStandings(players).map((player, index) => (
           <div className="score-row" key={player.id}>
             <span className="score-place">0{index + 1}</span>
             <Avatar player={player} viewerId={viewerId} size="small" />
@@ -695,6 +696,7 @@ function Table({
   onKeep,
   onExchangeChoice,
   exchangeBusy,
+  actionBusy,
   visibleDiscard,
   onPlayTrickCard,
   onDeclareChicago,
@@ -714,6 +716,7 @@ function Table({
   onKeep: () => void;
   onExchangeChoice: (accept: boolean) => void;
   exchangeBusy: boolean;
+  actionBusy: boolean;
   visibleDiscard: number;
   onPlayTrickCard: (id: string, from?: CardFlight["from"]) => void;
   onDeclareChicago: () => void;
@@ -754,8 +757,7 @@ function Table({
   const finalTrickWinner = game.players.find((player) => player.id === game.finalTrickAward?.winnerId);
   const chicagoPlayer = game.players.find((player) => player.id === game.chicagoPlayerId);
   const chicagoBreaker = game.players.find((player) => player.id === game.chicagoBreakerId);
-  const canDeclareChicago = playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
-    !game.chicagoPlayerId && local.score >= 15;
+  const canDeclareChicago = canPlayerDeclareChicago(game, viewerId);
   const [showExchangeFeedback, setShowExchangeFeedback] = useState(false);
   const seenExchangeEvent = useRef(0);
   const [exchangeQueue, setExchangeQueue] = useState<ExchangeEvent[]>([]);
@@ -882,15 +884,16 @@ function Table({
                 <span>Första nya kortet</span>
                 <PlayingCard card={pendingExchange.card} />
                 {yourChoice ? <div className="exchange-offer-actions">
-                  <span>Vill du ha det visade kortet?</span>
-                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(true)}>Ja</button>
-                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(false)}>Nej</button>
+                  <span>Ta det visade kortet eller avstå och få nästa kort dolt.</span>
+                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(true)}>Ta det visade kortet</button>
+                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(false)}>Avstå · få ett nytt kort</button>
                 </div> : <span>Väntar på svar…</span>}
               </div>}
               </> : <div className="trick-view" aria-live="polite">
                 {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
                   Chicago: <strong>{chicagoPlayer.name}</strong> satsar på alla stick
+                  {!game.currentTrick.length && !game.completedTricks.length && <small>Första utspelaren har företräde, därefter gäller spelordningen. Valet låses vid första kortet.</small>}
                   {chicagoBreaker && <small>Bruten av {chicagoBreaker.name} · +10 p</small>}
                 </div>}
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
@@ -983,7 +986,7 @@ function Table({
               {exchanging && handAction}
               {playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
                 <button type="button" className="button chicago-button" onClick={onDeclareChicago}
-                  disabled={!canDeclareChicago || exchangeBusy || !!flight}>
+                  disabled={!canDeclareChicago || actionBusy || !!flight}>
                   Säg Chicago · alla fem stick (+15 / −15)
                 </button>}
               {playingTricks && !game.chicagoPlayerId && local.score < 15 && !game.completedTricks.length &&
@@ -1165,7 +1168,8 @@ export default function App() {
       if (!current || busyRef.current || current.activePlayerId !== active.id || current.waitingForNextTrick) return;
       const origin = cardOrigin(`[data-player-id="${active.id}"] .opponent-cards .card-back:last-child`);
       playOneCard(applyCommand(current, { type: "advance-bot", actorId: current.ownerId }), origin);
-    }, BOT_PAUSE_MS);
+    }, !game.currentTrick.length && !game.completedTricks.length &&
+      game.players.some((player) => player.control === "human" && player.score >= 15) ? 5000 : BOT_PAUSE_MS);
     return () => window.clearTimeout(timer);
   }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId, online]);
 
@@ -1281,6 +1285,7 @@ export default function App() {
     onKeep={finishHumanExchange}
     onExchangeChoice={answerHumanExchange}
     exchangeBusy={busy || view.activePlayerId !== viewerId}
+    actionBusy={busy}
     visibleDiscard={view.discardCount}
     onPlayTrickCard={playHumanCard}
     onDeclareChicago={() => {
