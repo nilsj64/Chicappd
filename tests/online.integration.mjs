@@ -116,6 +116,7 @@ test("an online room with one human and CPU players completes a round", async ()
         body: { type: "add-bot" } })).status, 200);
     let view = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
     assert.deepEqual(view.players.map((player) => player.control), ["human", "bot", "bot", "bot"]);
+    assert.deepEqual(view.players.filter(player => player.control === "bot").map(player => player.name), ["Terra", "Luna", "Astra"]);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "start-round" } })).status, 200);
     for (let exchange = 0; exchange < 3; exchange++) {
@@ -126,6 +127,7 @@ test("an online room with one human and CPU players completes a round", async ()
     const finished = await finishRoomWithBots(code, [owner]);
     assert.equal(finished.completedTricks.length, 5);
     assert.equal(finished.players.length, 4);
+    assert.deepEqual(finished.players.filter(player => player.control === "bot").map(player => player.name), ["Terra", "Luna", "Astra"]);
   } finally { await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token }); }
 });
 

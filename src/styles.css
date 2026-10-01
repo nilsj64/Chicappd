@@ -600,6 +600,7 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
 .lobby-content {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.75fr);
+  align-items: start;
   gap: 22px;
   margin-top: 41px;
 }
@@ -795,30 +796,72 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
   margin: 10px 0 30px;
 }
 .room-rule {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 23px;
-  padding: 13px;
-  border-radius: 8px;
-  background: #f2f7ef;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid #e3e9df;
+  border-radius: 12px;
+  background: #f7f9f3;
   color: #285342;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.45;
 }
 .room-rule .room-code-label {
-  margin: 0;
+  margin: 0 0 2px;
+  color: #60786a;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.room-rule label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.room-rule select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cad7ca;
+  border-radius: 8px;
+  background: #fffefa;
+  color: #285342;
+  font: inherit;
+  font-weight: 400;
+}
+.room-rule select:disabled {
+  background: #edf1e9;
+  color: #657c6d;
+  opacity: 1;
+  cursor: not-allowed;
+}
+.room-start {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid #e3e9df;
 }
 .start-button {
   width: 100%;
+  min-height: 52px;
+  padding: 14px 18px;
+  border: 1px solid transparent;
+  justify-content: space-between;
 }
-.room-panel small {
+.start-button:disabled {
+  background: #e8eee4;
+  border-color: #d6e0d2;
+  color: #718371;
+  box-shadow: none;
+}
+.start-button:disabled .ui-icon { opacity: .55; }
+.room-start small {
   display: block;
   text-align: center;
-  color: #90a092;
+  color: #738576;
   margin-top: 12px;
   font-size: 11px;
+  line-height: 1.6;
 }
 .table-page {
   min-height: 100vh;
@@ -2159,21 +2202,6 @@ input:focus-visible {
   color: #fff;
   background: #493b34;
   box-shadow: 0 8px 24px #0003;
-}
-.room-rule label {
-  display: grid;
-  gap: 6px;
-  margin-top: 14px;
-  font-size: 0.85rem;
-}
-.room-rule select {
-  width: 100%;
-  padding: 9px 12px;
-  border: 1px solid #b9b0a2;
-  border-radius: 8px;
-  background: #fffdf9;
-  color: #24211e;
-  font: inherit;
 }
 .chicago-button {
   margin-top: 12px;

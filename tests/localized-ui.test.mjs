@@ -185,3 +185,19 @@ test("physical setup and six-human scoreboard respect the optional Chicago requi
     assert.match(html,language==="sv"?/Över 52 poäng krävs för vinst/:/More than 52 points are needed to win/);
   }
 });
+
+test("new CPU names are consistent in lobby, active table and both languages", () => {
+  let room=createRoom("Alex","TEST1","ada"); // A human's old-looking name must stay untouched.
+  for(let i=0;i<3;i++) room=addDemoPlayer(room);
+  const view=viewForPlayer(startRound(room),"ada");
+  assert.deepEqual(view.players.map(p=>p.name),["Alex","Terra","Luna","Astra"]);
+  const lobbyProps={viewerId:"ada",online:false,onRemoveBot:noop,onAddBot:noop,onSettings:noop,onStart:noop,onLeave:noop};
+  const tableProps={viewerId:"ada",online:false,selectedCardIds:[],exchangeBusy:false,actionBusy:false,visibleDiscard:0,flight:null,reviewedTrickCount:0,
+    ...Object.fromEntries(["onToggle","onExchange","onKeep","onExchangeChoice","onPlayTrickCard","onDeclareChicago","onCardLanded","onNextRound","onLobby","onLeave"].map(k=>[k,noop]))};
+  for(const language of ["sv","en"]) {
+    const lobby=render(language,React.createElement(Lobby,{...lobbyProps,game:viewForPlayer(room,"ada")}));
+    const table=render(language,React.createElement(Table,{...tableProps,game:view}));
+    for(const name of ["Alex","Terra","Luna","Astra"]) {assert.ok(lobby.includes(name));assert.ok(table.includes(name));}
+    assert.doesNotMatch(lobby,/\bSam\b|\bKim\b/);assert.doesNotMatch(table,/\bSam\b|\bKim\b/);
+  }
+});

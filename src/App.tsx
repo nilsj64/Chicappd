@@ -445,8 +445,8 @@ function Lobby({
               </button>
               <p>{copied ? t("Koden är kopierad!") : t("Tryck på koden för att kopiera den.")}</p></>
               : <p>{t("Lägg till datorstyrda spelare och välj regler innan ni börjar.")}</p>}
-            <div className="room-rule">
-              <span className="room-code-label">{t("POÄNGREGEL")}</span>
+            <section className="room-rule" aria-labelledby="room-rule-title">
+              <h3 id="room-rule-title" className="room-code-label">{t("POÄNGREGEL")}</h3>
               <label>{t("Sista sticket")}<select value={game.settings.finalTrickPoints} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, finalTrickPoints: Number(event.target.value) as 2 | 5 })}>
                   <option value={5}>{t("5 poäng")}</option><option value={2}>{t("2 poäng")}</option>
@@ -472,20 +472,23 @@ function Lobby({
                   <option value="no">{t("Av · behåll poängen")}</option><option value="yes">{t("På · nollställ till 0")}</option>
                 </select>
               </label>
+            </section>
+            <div className="room-start">
+              <button
+                className="button button-primary start-button"
+                aria-describedby="room-start-hint"
+                onClick={onStart}
+                disabled={game.players.length < 2 || game.players.length > capacity || game.ownerId !== viewerId || !!matchWinner}
+              >
+                {t("Börja spela")}{" "}<Icon name="arrow-right" />
+              </button>
+              <small id="room-start-hint">
+                {matchWinner ? t("Matchen är avgjord. Skapa ett nytt rum för en ny match.")
+                  : game.players.length < 2
+                  ? t("Bjud in en vän eller lägg till en datorstyrd spelare.")
+                  : t("Starta matchen med fem kort var.")}
+              </small>
             </div>
-            <button
-              className="button button-primary start-button"
-              onClick={onStart}
-              disabled={game.players.length < 2 || game.players.length > capacity || game.ownerId !== viewerId || !!matchWinner}
-            >
-              {t("Börja spela")}{" "}<Icon name="arrow-right" />
-            </button>
-            <small>
-              {matchWinner ? t("Matchen är avgjord. Skapa ett nytt rum för en ny match.")
-                : game.players.length < 2
-                ? t("Bjud in en vän eller lägg till en datorstyrd spelare.")
-                : t("Starta matchen med fem kort var.")}
-            </small>
           </aside>
         </div>
       </main>
