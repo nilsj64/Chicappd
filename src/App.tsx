@@ -21,6 +21,7 @@ import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
 import { canExchangeCards, chicagoBreakPoints, matchWinnerId, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
+import MonkeyDealer from "./MonkeyDealer";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
@@ -857,6 +858,9 @@ function Table({
         <section className="felt-wrap">
           <div className={`felt ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
+            <MonkeyDealer key={game.roundStarterId} exchange={exchangePlayback}
+              initialDeal={exchanging || (playingTricks && !game.currentTrick.length && !game.completedTricks.length)}
+              presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
             {exchanging && <div className="exchange-round">Kortbyte {game.exchangeCount + 1} av 3</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
               Kortbyte {game.exchangeFeedback.exchangeCount} klart · {game.exchangeFeedback.changedCards === 0
