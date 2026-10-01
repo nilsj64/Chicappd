@@ -139,7 +139,7 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
             setNames((current) => current.map((item, position) => position === index ? event.target.value : item))} />
         </label>)}</div>
         <div className="irl-inline-actions">
-          <button type="button" onClick={() => setNames((current) => [...current, ""])} disabled={names.length >= 4}><Icon name="plus" /> {" "}{t("Spelare")}</button>
+          <button type="button" onClick={() => setNames((current) => [...current, ""])} disabled={names.length >= 4}><Icon name="plus" /> {" "}{t("Lägg till spelare")}</button>
           <button type="button" onClick={() => setNames((current) => current.slice(0, -1))} disabled={names.length <= 2}>{t("Ta bort sista")}</button>
         </div>
         <h2>{t("Regler")}</h2>

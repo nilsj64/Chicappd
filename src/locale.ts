@@ -53,6 +53,9 @@ const legacy: { source: MessageKey; terms?: number[] }[] = [
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const patterns = legacy.map(entry => ({...entry, regex: new RegExp("^" + entry.source.split(/\{\d+\}/).map(escape).join("(.*?)") + "$", "u")}));
 const highRanks: Record<string, string> = { "tvåor": "two", "treor": "three", "fyror": "four", "femmor": "five", "sexor": "six", "sjuor": "seven", "åttor": "eight", "nior": "nine", "tior": "ten", "knektar": "jack", "damer": "queen", "kungar": "king", "ess": "ace" };
+// Old high-card labels use plural ranks. Use singular Swedish at the display
+// boundary only; pairs and stored evaluator labels keep their existing format.
+const swedishHighRanks: Record<string, string> = { "tvåor": "två", "treor": "tre", "fyror": "fyra", "femmor": "fem", "sexor": "sex", "sjuor": "sju", "åttor": "åtta", "nior": "nio", "tior": "tio", "knektar": "knekt", "damer": "dam", "kungar": "kung", "ess": "ess" };
 export function localizeMessage(language: Language, value: string): string {
   if (known(value)) return translate(language, value);
   for (const entry of patterns) {
@@ -62,6 +65,7 @@ export function localizeMessage(language: Language, value: string): string {
       if (/^\d+$/.test(text) && (entry.source.includes(`{${index}} poäng`) ||
         entry.source.includes(`{${index}} kort`))) return Number(text);
       if (!entry.terms?.includes(index)) return text;
+      if (language === "sv" && entry.source === "Högt kort – {0}" && swedishHighRanks[text]) return swedishHighRanks[text];
       if (language === "en" && (entry.source.includes("högst") || entry.source.startsWith("Högt kort")) && highRanks[text]) return highRanks[text];
       if (language === "en" && text === "ess" && /^(Fyrtal|Kåk|Triss|Två par|Ett par)/.test(entry.source)) return "aces";
       return localizeMessage(language, text);

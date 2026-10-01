@@ -81,3 +81,35 @@ test("Chicago breaks without a bonus translate without promising points", () => 
   assert.equal(localizeMessage("en", "Ada bröt Chicago"), "Ada broke Chicago");
   assert.equal(localizeMessage("en", "Bröt Chicago: Ada"), "Broke Chicago: Ada");
 });
+
+test("Swedish display copy consistently uses rounds and plain account language", () => {
+  for (const key of Object.keys(english)) {
+    assert.doesNotMatch(translate("sv", key), /\b(?:giv|givar|given|givens)\b|presenterad\w*|\bavstod\b|kontoärendet|kontotjänsten|spelaridentitet|CPU-spelare|\bDatorspelare\b/iu, key);
+  }
+  assert.equal(translate("sv", "Givare:"), "Givare:");
+  assert.equal(translate("sv", "Nästa giv"), "Nästa runda");
+  assert.equal(translate("sv", "Din första drag väntar"), "Din första runda väntar");
+  assert.equal(translate("sv", "Royal Flush ger omedelbar vinst oavsett poäng."), "Royal Flush ger omedelbar vinst oavsett poäng.");
+});
+
+test("Swedish legacy activity is polished only when displayed, preserving player names and saved events", () => {
+  const events = [
+    "Byte 1: Giv tog det presenterade kortet",
+    "Byte 2: Presenterade avstod från det presenterade kortet och fick ett nytt kort",
+  ];
+  const stored = JSON.stringify(events);
+  assert.deepEqual(events.map(e => localizeMessage("sv", e)), [
+    "Byte 1: Giv tog det öppna kortet",
+    "Byte 2: Presenterade tackade nej till det öppna kortet och fick ett nytt kort",
+  ]);
+  assert.equal(JSON.stringify(events), stored);
+  assert.equal(localizedError("sv", accountError({code:"signup_disabled"})), "Det går inte att skapa konto just nu. Du kan fortsätta spela som gäst.");
+  assert.equal(localizedError("sv", "Spelservern gav ingen spelaridentitet."), "Kunde inte ansluta dig till spelet. Försök igen.");
+});
+
+
+test("Swedish high-card labels use singular ranks without changing pair labels or stored evaluations", () => {
+  assert.equal(localizeMessage("sv", "Högt kort – kungar"), "Högt kort – kung");
+  assert.equal(localizeMessage("sv", "Ett par – kungar"), "Ett par – kungar");
+  assert.equal(localizeMessage("en", "Högt kort – kungar"), "High card — king");
+});

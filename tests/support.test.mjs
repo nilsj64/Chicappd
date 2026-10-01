@@ -77,7 +77,7 @@ test("when void in the led suit, advice stays within the legal hand", () => {
   game.players[0].hand = hand(["A", S], ["3", S], ["9", H], ["5", D], ["2", D]);
   const advice = supportAdvice(viewForPlayer(game, "local"), "local");
   assert.deepEqual(advice.tips[0].cardIds, ["diamonds-2"]);
-  assert.match(advice.tips[0].text, /inget kort i färgen som spelades ut/);
+  assert.match(advice.tips[0].text, /inte har något kort i färgen som spelades ut/);
   assert.deepEqual(advice.tips.flatMap((tip) => tip.cardIds).every((id) =>
     game.players[0].hand.some((held) => held.id === id)), true);
 });

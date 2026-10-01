@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import { languageStorageKey } from "../src/locale.ts";
 import { createIRLGame, recordFirstHands, finishIRLDeal } from "../src/irl.ts";
+import { createRoom, addDemoPlayer, startRound, applyCommand, viewForPlayer } from "../src/game.ts";
 import { defaultSettings } from "../src/scoring.ts";
 import { digitalResult, digitalResultId, digitalHistoryOptions } from "../src/digitalHistory.ts";
 import { HistoryStore } from "../src/history.ts";
@@ -20,9 +21,10 @@ const server=await createServer({configFile:false,envFile:false,cacheDir,server:
   // The browser-only provider has no SSR snapshot. Supply it only in this test
   // transform; its real state/records are still used and no source is changed.
   plugins:[{name:"test-ssr-snapshot",enforce:"pre",transform(code,id,options){
+    if(options?.ssr && id.endsWith("/App.tsx")) return code + "\nexport { Table, Entry, Lobby };";
     if(options?.ssr && id.endsWith("/HistoryProvider.tsx")) return code.replace(/useSyncExternalStore\((\w+)\.subscribe, \1\.getSnapshot\)/g,"useSyncExternalStore($1.subscribe, $1.getSnapshot, $1.getSnapshot)");
   }}]});
-const [{LanguageProvider,LanguageSwitch},{HistoryProvider},{default:App},{default:Physical},{default:Digital},{AccountIdentity}]=await Promise.all([
+const [{LanguageProvider,LanguageSwitch},{HistoryProvider},{default:App,Table,Entry,Lobby},{default:Physical},{default:Digital},{AccountIdentity}]=await Promise.all([
   server.ssrLoadModule("/src/LanguageProvider.tsx"),server.ssrLoadModule("/src/HistoryProvider.tsx"),server.ssrLoadModule("/src/App.tsx"),
   server.ssrLoadModule("/src/IRLTable.tsx"),server.ssrLoadModule("/src/DigitalHistoryPanel.tsx"),server.ssrLoadModule("/src/AccountControl.tsx")]);
 const originalStorage=globalThis.localStorage;
@@ -90,4 +92,45 @@ test("legacy statistics explain the recoverable final-hand baseline",async()=>{
  const html=render("en",React.createElement(Digital,{onBack:noop,onPhysical:noop,onPlay:noop}),storage);
  assert.match(html,/Older results include only the final hand/);
  assert.match(html,/Earlier hands cannot be recovered/);
+});
+
+
+test("Swedish digital table and online room screens render natural copy while English stays localized", () => {
+  const room=addDemoPlayer(createRoom("Ada", "TEST1"));
+  const game=startRound(room), viewerId=game.ownerId;
+  const before=JSON.stringify(game);
+  const tableProps={viewerId,online:false,selectedCardIds:[],exchangeBusy:false,actionBusy:false,visibleDiscard:0,flight:null,reviewedTrickCount:5,
+    ...Object.fromEntries(["onToggle","onExchange","onKeep","onExchangeChoice","onPlayTrickCard","onDeclareChicago","onCardLanded","onNextRound","onLobby","onLeave"].map(k=>[k,noop]))};
+  const exchange=render("sv",React.createElement(Table,{...tableProps,game:viewForPlayer(game,viewerId)}));
+  assert.match(exchange,/Välj vilka kort du vill byta/);
+  const offered=applyCommand(game,{type:"exchange",actorId:viewerId,discardIds:[game.players[0].hand[0].id]});
+  const offer=render("sv",React.createElement(Table,{...tableProps,game:viewForPlayer(offered,viewerId)}));
+  assert.match(offer,/Ta det öppna kortet/);assert.match(offer,/Tacka nej/);assert.doesNotMatch(offer,/presenterade|Avstå/);
+  const {view}=finishedDigitalRound();
+  const result=render("sv",React.createElement(Table,{...tableProps,viewerId:view.players[0].id,game:view}));
+  assert.match(result,/Rundan är slut|vann sista sticket|Matchen är avgjord/);assert.doesNotMatch(result,/\bgiv(?:en|ar|ens)?\b/i);
+  const en=render("en",React.createElement(Table,{...tableProps,viewerId:view.players[0].id,game:view}));
+  assert.match(en,/Final trick|Royal Flush/);assert.doesNotMatch(en,/rundan|sticket|Behåll/);
+  const lobby=render("sv",React.createElement(Lobby,{game:viewForPlayer(room,viewerId),viewerId,online:true,onRemoveBot:noop,onAddBot:noop,onSettings:noop,onStart:noop,onLeave:noop}));
+  assert.match(lobby,/Den som skapade rummet/);assert.match(lobby,/Datorstyrd spelare/);
+  const join=render("sv",React.createElement(Entry,{mode:"join",onBack:noop,onSubmit:noop,busy:false,error:"Ogiltig spelarsession."}));
+  assert.match(join,/Rumskod/);assert.match(join,/Du behöver gå med i rummet igen/);
+  assert.equal(JSON.stringify(game),before);
+});
+
+const {default:Status}=await server.ssrLoadModule("/src/HistoryStatus.tsx");
+test("Swedish history UI distinguishes local saves, pending account saves, refreshes and failures", () => {
+  const cases=[
+    [{loading:false,error:null,records:[]},false,/Historik på den här enheten/],
+    [{loading:false,error:null,records:[{dirty:true}]},true,/Sparat på enheten · väntar på att sparas på ditt konto/],
+    [{loading:false,error:null,records:[{dirty:false}]},true,/Historiken är sparad på ditt konto/],
+    [{loading:true,error:null,records:[]},true,/Hämtar historiken/],
+    [{loading:true,error:null,records:[{dirty:false}]},true,/Uppdaterar historiken/],
+    [{loading:false,error:"network",records:[{dirty:true}]},true,/Det som redan är sparat på enheten finns kvar/],
+    [{loading:false,error:"Kunde inte spara på den här enheten. Håll sidan öppen och försök igen.",records:[]},false,/Kunde inte spara på den här enheten/],
+  ];
+  for(const [history,signedIn,expected] of cases) {
+    const html=render("sv",React.createElement(Status,{history,signedIn,onRetry:noop}));
+    assert.match(html,expected);assert.doesNotMatch(html,/kontotjänst|kontoärende|synka/);
+  }
 });
