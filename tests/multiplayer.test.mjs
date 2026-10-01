@@ -405,7 +405,7 @@ test("remaining exchanges skip automatically when the last eligible player reach
   let game = applyCommand(humanRoom(), { type: "start-round", actorId: "human-a" });
   game = { ...game, players: game.players.map((player, index) => ({ ...player, score: index ? 47 : 45,
     hand: index ? ["2", "4", "6", "8", "10"].map((rank) => ({ id: `hearts-${rank}`, rank, suit: "hearts" }))
-      : ["10", "J", "Q", "K", "A"].map((rank) => ({ id: `spades-${rank}`, rank, suit: "spades" })) })) };
+      : ["9", "10", "J", "Q", "K"].map((rank) => ({ id: `spades-${rank}`, rank, suit: "spades" })) })) };
   const held = new Set(game.players.flatMap((p) => p.hand.map((c) => c.id)));
   game.deck = createDeck().filter((card) => !held.has(card.id));
   game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });

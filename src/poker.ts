@@ -197,3 +197,11 @@ export function showdownHandLabel(evaluation: HandEvaluation, all: readonly Hand
   return decisive < shown ? evaluation.label
     : `${evaluation.label} · ${rankDisplay[evaluation.tiebreakers[decisive]]} som ${detail}`;
 }
+
+/** The ace-high straight flush is the only Royal Flush. Keep its existing score. */
+export function isRoyalFlush(evaluation: HandEvaluation): boolean {
+  return evaluation.category === "straight-flush" && evaluation.tiebreakers[0] === 14;
+}
+export function pokerHandName(evaluation: HandEvaluation): string {
+  return isRoyalFlush(evaluation) ? "Royal Flush" : handCategoryName[evaluation.category];
+}

@@ -12,7 +12,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(24)),
   (byte) => byte.toString(16).padStart(2, "0")).join("");
 const validName = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0 && value.trim().length <= 20;
+  typeof value === "string" && value.trim().length > 0 && value.trim().length <= 24;
 
 export class GameRoom extends DurableObject<Env> {
   private openingChicagoWindow(game: GameState): boolean {
@@ -59,7 +59,7 @@ export class GameRoom extends DurableObject<Env> {
     if (path === "/create" && request.method === "POST") {
       if (saved) return json({ error: "Koden används redan." }, 409);
       const name = (body as { name?: unknown } | null)?.name;
-      if (!validName(name)) return json({ error: "Ange ett namn med högst 20 tecken." }, 400);
+      if (!validName(name)) return json({ error: "Ange ett namn med högst 24 tecken." }, 400);
       const playerId = crypto.randomUUID();
       const game = createRoom(name.trim(), url.searchParams.get("code")!, playerId);
       const session = { playerId, token: token() };
@@ -70,7 +70,7 @@ export class GameRoom extends DurableObject<Env> {
     if (!saved) return json({ error: "Rummet finns inte." }, 404);
     if (path === "/join" && request.method === "POST") {
       const name = (body as { name?: unknown } | null)?.name;
-      if (!validName(name)) return json({ error: "Ange ett namn med högst 20 tecken." }, 400);
+      if (!validName(name)) return json({ error: "Ange ett namn med högst 24 tecken." }, 400);
       if (saved.game.phase !== "lobby" || saved.game.players.length >= 4)
         return json({ error: "Rummet är fullt eller spelet har startat." }, 409);
       const playerId = crypto.randomUUID();

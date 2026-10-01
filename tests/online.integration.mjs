@@ -412,3 +412,19 @@ test("optional rules default off, sync to opponents and survive round start and 
     await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token });
   }
 });
+
+test("online seats preserve the full 24-character account username", async () => {
+  const name="abcdefghijklmnopqrstuvwx";
+  const owner=await call("/rooms",{method:"POST",body:{name}});
+  assert.equal(owner.status,201);assert.equal(owner.view.players[0].name,name);
+  const code=owner.view.roomCode;
+  const guest=await call(`/rooms/${code}/join`,{method:"POST",body:{name:"zyxwvutsrqponmlkjihgfedc"}});
+  try {
+    assert.equal(guest.status,200);assert.equal(guest.view.players[1].name,"zyxwvutsrqponmlkjihgfedc");
+    const bad=await call(`/rooms/${code}/join`,{method:"POST",body:{name:name+"y"}});
+    assert.equal(bad.status,400);assert.match(bad.error,/24/);
+  } finally {
+    if(guest.token)await call(`/rooms/${code}/leave`,{method:"POST",token:guest.token});
+    await call(`/rooms/${code}/leave`,{method:"POST",token:owner.token});
+  }
+});

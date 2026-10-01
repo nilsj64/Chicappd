@@ -45,6 +45,7 @@ const legacy: { source: MessageKey; terms?: number[] }[] = [
   { source: "{0} vann Chicago (+{1} p)" },
   { source: "{0} förlorade Chicago ({1} p)" },
   { source: "{0} vann stick {1}" },
+  { source: "{0} vann med Royal Flush" },
   { source: "{0} spelar {1} i {2}", terms: [2] },
   { source: "{0} · {1} som {2}", terms: [0, 1, 2] },
   ...(["Färgstege – {0} högst", "Fyrtal – {0}", "Kåk – {0} över {1}", "Färg – {0} högst", "Stege – {0} högst", "Triss – {0}", "Två par – {0} och {1}", "Ett par – {0}", "Högt kort – {0}"] as const).map(source => ({source, terms:[0,1]})),

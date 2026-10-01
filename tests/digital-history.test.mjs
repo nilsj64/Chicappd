@@ -30,7 +30,7 @@ test("only completed results are archived, with a public seat-independent projec
 test("guest archive retains multiple rounds and survives reload without duplicates", async () => {
   const storage = disk(), a = store(storage);
   const one = digitalResult(finishedDigitalRound("TEST1").view,"local");
-  const two = {...one,roomCode:"TEST2"};
+  const two = {...one,matchId:crypto.randomUUID(),roomCode:"TEST2"};
   for (const g of [one,two,one]) a.append(await digitalResultId(g),g);
   assert.equal(a.getSnapshot().records.length,2);
   const b = store(storage); assert.equal(b.getSnapshot().records.length,2);
@@ -62,7 +62,7 @@ test("late captures stay in the original account or guest backup across auth cha
   a.setOwner("alice",cloud); await a.sync(); a.setOwner("bob",cloud); await a.sync();
   a.append(id,result,"alice"); assert.equal(a.getSnapshot().records.length,0);
   a.setOwner("alice",cloud); await a.sync(); assert.equal(a.getSnapshot().records.length,1);
-  const guestResult = {...result,roomCode:"NEW11"}; a.append(await digitalResultId(guestResult),guestResult,null); await a.sync();
+  const guestResult = {...result,matchId:crypto.randomUUID(),roomCode:"NEW11"}; a.append(await digitalResultId(guestResult),guestResult,null); await a.sync();
   assert.equal((await cloud.list("alice")).length,2);
   a.setOwner(null,null); assert.equal(a.getSnapshot().records.length,1);
 });

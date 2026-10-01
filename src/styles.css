@@ -2260,3 +2260,16 @@ input:focus-visible {
   .irl-name-list, .irl-settings, .irl-hand-picker { grid-template-columns: 1fr; }
   .irl-card { padding: 18px; }
 }
+
+.account-name { padding-left: 10px; border-left: 2px solid #ca846e; cursor: default; }
+.digital-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin: 28px 0; }
+.digital-stats-grid .stat-card { padding: 22px; }
+.stat-card dt { font-size: 13px; color: #60766d; }
+.stat-card dd { margin: 12px 0 0; font-size: 25px; font-weight: 600; }
+.hand-statistics { margin-bottom: 32px; }
+.hand-statistics summary { cursor: pointer; font-weight: 600; }
+.hand-statistics p { font-size: 13px; }
+.hand-statistics dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 28px; }
+.hand-statistics dl div { display: flex; justify-content: space-between; gap: 16px; }
+.hand-statistics dt { text-transform: capitalize; }
+.hand-statistics dd { margin: 0; font-weight: 600; }

@@ -5,7 +5,7 @@ import { loadEnv } from "vite";
 import { createClient } from "@supabase/supabase-js";
 import { authenticateAccount } from "../src/account.ts";
 import { HistoryStore, supabaseHistoryRemote } from "../src/history.ts";
-import { digitalResult, digitalResultId, digitalHistoryOptions } from "../src/digitalHistory.ts";
+import { digitalResult, digitalResultId, digitalHistoryOptions, digitalStatistics } from "../src/digitalHistory.ts";
 import { finishedDigitalRound } from "./digital-fixture.mjs";
 
 const env = loadEnv("development", process.cwd(), "VITE_SUPABASE_");
@@ -25,7 +25,9 @@ try {
   await authenticateAccount(b,"signin","historyb_mupp5xxm",password);
   const physical = supabaseHistoryRemote(a), remote = supabaseHistoryRemote(a,digitalHistoryOptions);
   const physicalBefore = await physical.list(userA), before = await remote.list(userA);
-  const local = digitalResult(finishedDigitalRound(`CHECK-${Date.now()}`).view,"local");
+  const fixture = finishedDigitalRound(`CHECK-${Date.now()}`);
+  fixture.view.players[0].score=55;fixture.view.players[0].hasDeclaredChicago=true;
+  const local = digitalResult(fixture.view,"local",fixture.game.ownerId);
   const id = await digitalResultId(local);
   const storage = disk(), guest = store(storage);
   guest.append(id,local);
@@ -38,6 +40,8 @@ try {
   assert.equal(guest.getSnapshot().records.length,1);
   guest.setOwner(userA,remote); await guest.sync();
   assert.equal((await remote.list(userA)).length,before.length+1);
+  const stats=digitalStatistics(guest.getSnapshot().records,"historya_mupp5xxm");
+  assert.equal(digitalStatistics(guest.getSnapshot().records.filter(r=>r.id===id)).wins,1);
   const reloaded = store(storage); reloaded.setOwner(userA,remote); await reloaded.sync();
   assert.ok(reloaded.getSnapshot().records.some(r => r.id === id));
   console.log("Live guest import, reload, sign-out guest restoration and duplicate-free sign-in passed.");
@@ -45,6 +49,8 @@ try {
   const freshClient = client(); await authenticateAccount(freshClient,"signin","historya_mupp5xxm",password);
   const fresh = store(disk()); fresh.setOwner(userA,supabaseHistoryRemote(freshClient,digitalHistoryOptions)); await fresh.sync();
   assert.deepEqual(fresh.getSnapshot().records.find(r => r.id === id).game,local);
+  assert.deepEqual(digitalStatistics(fresh.getSnapshot().records,"historya_mupp5xxm"),stats);
+  console.log("Aggregated statistics survive guest merge, repeated sign-in and a fresh authenticated session.");
   const failed = {...remote,list:async () => { throw new TypeError("offline"); }};
   reloaded.setOwner(userA,failed);
   const online = {...local,source:"online",sourceRevision:1,roomCode:`ONLINE-${Date.now()}`};

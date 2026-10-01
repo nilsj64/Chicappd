@@ -1,10 +1,11 @@
 import { useI18n } from "./LanguageProvider";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { evaluateHand, handCategoryName } from "./poker";
+import { evaluateHand, handCategoryName, pokerHandName } from "./poker";
 import type { Card, ExchangeEvent, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
+  digitalMatchWinnerId,
   canPlayerDeclareChicago,
   createRoom,
   randomRoomCode,
@@ -20,11 +21,12 @@ import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
-import { canExchangeCards, matchWinnerId, scoreStandings } from "./scoring";
+import { canExchangeCards, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
 import MonkeyDealer from "./MonkeyDealer";
 import AccountControl from "./AccountControl";
 import { useAccountHistory } from "./HistoryProvider";
+import { accountName } from "./account";
 import { digitalResult, digitalResultId } from "./digitalHistory";
 import DigitalHistoryPanel from "./DigitalHistoryPanel";
 
@@ -178,7 +180,7 @@ function Landing({ onEnter, onPhysical, onHistory }: { onEnter: (mode: EntryMode
           <nav className="landing-history" aria-label={t("Poäng och historik")}>
             <span className="form-kicker">{t("POÄNG OCH HISTORIK")}</span>
             <button onClick={onPhysical}><span>{t("Fysiska kort")}<small>{t("Poängräknare och sparade matcher")}</small></span><Icon name="arrow-right" /></button>
-            <button onClick={onHistory}><span>{t("Digital spelhistorik")}<small>{t("Resultat från avslutade givar")}</small></span><Icon name="arrow-right" /></button>
+            <button onClick={onHistory}><span>{t("Digital spelarstatistik")}<small>{t("Dina resultat och bästa händer")}</small></span><Icon name="arrow-right" /></button>
           </nav>
         </div>
         <div className="hero-art" aria-hidden="true">
@@ -224,6 +226,8 @@ function Entry({
   busy: boolean;
 }) {
   const { t, errorMessage } = useI18n();
+  const { user, loading: accountLoading } = useAccountHistory();
+  const username = user ? accountName(user) : null;
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const joining = mode === "join";
@@ -263,13 +267,14 @@ function Entry({
           className="entry-card"
           onSubmit={(event) => {
             event.preventDefault();
+            if (accountLoading) return;
             if (joining) {
-              onSubmit(name.trim() || "Du", {
+              onSubmit(username ?? (name.trim() || t("Du")), {
                 kind: "join",
                 code: code.trim().toUpperCase(),
               });
             } else {
-              onSubmit(name.trim() || "Du", { kind: "create" });
+              onSubmit(username ?? (name.trim() || t("Du")), { kind: "create" });
             }
           }}
         >
@@ -278,6 +283,7 @@ function Entry({
             {joining ? t("GÅ MED I RUM") : t("SKAPA RUM")}
           </div>
           <h2>{joining ? t("Gå med i ett rum") : t("Skapa ett rum")}</h2>
+          {accountLoading ? <p role="status">{t("Ett ögonblick…")}</p> : username ? <p className="entry-identity">{t("Du spelar som {0}", [username])}</p> : <>
           <label htmlFor="player-name">{t("Vad heter du?")}</label>
           <input
             id="player-name"
@@ -287,6 +293,7 @@ function Entry({
             onChange={(event) => setName(event.target.value)}
             autoFocus
           />
+          </>}
           {joining && (
             <>
               <label htmlFor="room-code">{t("Rumskod")}</label>
@@ -308,7 +315,7 @@ function Entry({
           )}
           <button
             className="button button-primary form-submit"
-            type="submit" disabled={busy}
+            type="submit" disabled={busy || accountLoading}
           >
             {joining ? t("Gå med i rummet") : t("Skapa rummet")} <Icon name="arrow-up-right" />
           </button>
@@ -368,7 +375,7 @@ function Lobby({
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  const matchWinner = matchWinnerId(game.players, game.settings);
+  const matchWinner = digitalMatchWinnerId(game);
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(game.roomCode);
@@ -685,7 +692,7 @@ function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; vi
         ))}
       </div>
       <div className="score-foot">
-        {t("✓ = har sagt Chicago ·")}{" "}{t("Över 52 poäng krävs för vinst (minst 53).")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
+        {t("✓ = har sagt Chicago ·")}{" "}{t("Över 52 poäng krävs för vinst (minst 53).")} {t("Royal Flush ger omedelbar vinst oavsett poäng.")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
       </div>
     </aside>
   );
@@ -754,7 +761,7 @@ function Table({
   const { t, message, errorMessage, language } = useI18n();
   const local = game.players.find((player) => player.id === viewerId)!;
   const exchangeAllowed = canExchangeCards(local.score);
-  const matchWinner = game.tableStage === "result" ? matchWinnerId(game.players, game.settings) : null;
+  const matchWinner = game.tableStage === "result" ? digitalMatchWinnerId(game) : null;
   const [supportOpen, setSupportOpen] = useState(false);
   const advice = supportOpen ? supportAdvice(game, viewerId, language) : null;
   const opponents = game.players.filter((player) => player.id !== viewerId);
@@ -935,16 +942,16 @@ function Table({
                 {showResult && <div className="round-summary">
                   {matchWinner && <MatchPodium players={game.players} winnerId={matchWinner} />}
                   <div className="round-awards">
-                    <div><span>{t("Sista sticket · separat regel")}</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} {" "}{t("p")}</b></strong></div>
+                    {game.finalTrickAward && <div><span>{t("Sista sticket · separat regel")}</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} {" "}{t("p")}</b></strong></div>}
                     <div><span>{t("Bästa handen")}</span><strong>{finalAward?.winnerId
-                      ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalWinnerCategory ? message(handCategoryName[finalWinnerCategory]) : ""}` : t("Ingen")}
+                      ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalWinnerCategory ? message(game.royalFlushWinnerId ? "Royal Flush" : handCategoryName[finalWinnerCategory]) : ""}` : t("Ingen")}
                       <b>+{finalAward?.points ?? 0} {" "}{t("p")}</b></strong></div>
                     {game.chicagoAward && <div><span>Chicago</span><strong>{chicagoPlayer?.name}
                       <b>{game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} {" "}{t("p")}</b></strong></div>}
                   </div>
                   <div className="round-hands"><h3>{t("Händer vid rundans slut")}</h3><ul>{game.players.map((player) => <li key={player.id}>
                     <span>{player.name}</span><span>{finalAward?.evaluations[player.id]
-                      ? message(handCategoryName[finalAward.evaluations[player.id].category]) : ""}</span>
+                      ? message(pokerHandName(finalAward.evaluations[player.id])) : ""}</span>
                   </li>)}</ul></div>
                   {!matchWinner && <button className="button button-next-round" onClick={onNextRound}>
                     {t("Spela en runda till")}{" "}<Icon name="arrow-right" />
@@ -1094,7 +1101,7 @@ export default function App() {
 
   useEffect(() => {
     if (!view) return;
-    const result = digitalResult(view, online ? "online" : "local");
+    const result = digitalResult(view, online ? "online" : "local", viewerId ?? undefined);
     if (!result) return;
     const owner = digitalStore.getSnapshot().ownerId;
     void digitalResultId(result).then(id => digitalStore.append(id, result, owner))

@@ -1,3 +1,4 @@
+import type { User } from "@supabase/supabase-js";
 import { useI18n } from "./LanguageProvider";
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -9,8 +10,6 @@ import HistoryStatus from "./HistoryStatus";
 export default function AccountControl({ showHistoryStatus = true }: { showHistoryStatus?: boolean }) {
   const { t, message, errorMessage } = useI18n();
   const { client, user, loading, history, store, digitalHistory, digitalStore } = useAccountHistory();
-  const name = user ? accountName(user) : "";
-  const displayedName = name === "Ditt konto" ? t("Ditt konto") : name;
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -63,9 +62,9 @@ export default function AccountControl({ showHistoryStatus = true }: { showHisto
   return <div className="account-control">
     <div className="account-actions">
     {user ? <>
-      <span className="account-name" title={t("Inloggad som {0}", [displayedName])}>{displayedName}<small>{t("Inloggad")}</small></span>
+      <AccountIdentity user={user} />
       <button className="text-button" disabled={busy} onClick={() => void signOut()}>{busy ? t("Loggar ut…") : t("Logga ut")}</button>
-    </> : <><span className="account-name">{loading ? t("Ett ögonblick…") : t("Gäst")}</span><button className="text-button" disabled={loading} onClick={() => { setError(""); setNotice(""); setOpen(true); dialog.current?.showModal(); usernameInput.current?.focus(); }}>
+    </> : <><AccountIdentity user={null} loading={loading} /><button className="text-button" disabled={loading} onClick={() => { setError(""); setNotice(""); setOpen(true); dialog.current?.showModal(); usernameInput.current?.focus(); }}>
       {t("Logga in")}</button></>}
     </div>
     {showHistoryStatus && <HistoryStatus history={combinedHistory} signedIn={!!user}
@@ -95,4 +94,16 @@ export default function AccountControl({ showHistoryStatus = true }: { showHisto
       <div className="account-guest-option"><p>{t("Konto är valfritt. Du kan alltid spela som gäst.")}</p><button className="text-button" onClick={() => dialog.current?.close()}>{t("Fortsätt som gäst")}</button></div>
     </dialog>
   </div>;
+}
+
+export function AccountIdentity({ user, loading = false }: { user: User | null; loading?: boolean }) {
+  const { t, locale } = useI18n();
+  const name = user ? accountName(user) : "";
+  const displayedName = name === "Ditt konto" ? t("Ditt konto") : name;
+  const created = user?.created_at && Number.isFinite(Date.parse(user.created_at))
+    ? new Date(user.created_at).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" }) : null;
+  return <span className="account-name" title={user ? t("Inloggad som {0}", [displayedName]) : undefined}>
+    {user ? <>{displayedName}<small>{t("Inloggad")}</small>{created && <small>{t("Konto skapat {0}", [created])}</small>}</>
+      : loading ? t("Ett ögonblick…") : <>{t("Gäst")}<small>{t("Du spelar som gäst")}</small></>}
+  </span>;
 }

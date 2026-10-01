@@ -1,4 +1,4 @@
-import { compareHands, evaluateHand, handCategoryName } from "./poker.ts";
+import { compareHands, evaluateHand, handCategoryName, isRoyalFlush } from "./poker.ts";
 import type { HandEvaluation } from "./poker.ts";
 import { chooseBotDiscards, chooseBotTrickCard } from "./bot.ts";
 import { legalCards, trickWinner } from "./tricks.ts";
@@ -56,6 +56,11 @@ export type ExchangeEvent = { id: number; exchangeCount: 1 | 2 | 3; playerId: st
 export type PendingExchange = { playerId: string; discardId: string; card: Card };
 export type GameState = {
   roomCode: string;
+  // Optional for rooms saved by older Workers. Added on their next deal.
+  matchId?: string;
+  dealNumber?: number;
+  royalFlushWinnerId?: string | null;
+  initialHandEvaluations?: Record<string, HandEvaluation>;
   ownerId: string;
   phase: Phase;
   tableStage: TableStage;
@@ -153,6 +158,7 @@ export function createRoom(
   };
   return {
     roomCode,
+    matchId: crypto.randomUUID(), dealNumber: 0, royalFlushWinnerId: null,
     ownerId: playerId,
     phase: "lobby",
     tableStage: "exchange",
@@ -210,7 +216,7 @@ export function addDemoPlayer(game: GameState): GameState {
 }
 
 export function startRound(game: GameState): GameState {
-  if (game.players.length < 2 || matchWinnerId(game.players, game.settings) ||
+  if (game.players.length < 2 || digitalMatchWinnerId(game) ||
     (game.phase !== "lobby" && game.tableStage !== "result")) return game;
   const deck = shuffled(createDeck());
   const players = game.players.map((player) => ({
@@ -220,8 +226,12 @@ export function startRound(game: GameState): GameState {
   const previousStarterIndex = game.roundStarterId
     ? players.findIndex((player) => player.id === game.roundStarterId) : -1;
   const starterId = players[previousStarterIndex < 0 ? 0 : (previousStarterIndex + 1) % players.length].id;
-  return runExchangeBots({
+  return runExchangeBots(finishRoyalFlush({
     ...game,
+    matchId: game.matchId ?? crypto.randomUUID(),
+    dealNumber: (game.dealNumber ?? 0) + 1,
+    initialHandEvaluations: Object.fromEntries(players.map(p => [p.id, evaluateHand(p.hand)])),
+    royalFlushWinnerId: null,
     phase: "table",
     tableStage: "exchange",
     players,
@@ -246,7 +256,7 @@ export function startRound(game: GameState): GameState {
     completedTricks: [],
     waitingForNextTrick: false,
     trickError: null,
-  });
+  }));
 }
 
 function returnToLobby(game: GameState): GameState {
@@ -299,6 +309,29 @@ function scorePokerHands(
     activity: [...game.activity, winnerId
       ? `${best!.name} hade bästa hand (${handCategoryName[evaluations[winnerId].category]}) och fick ${points} poäng${exchangeCount === 3 ? " vid rundans slut" : ` efter byte ${exchangeCount}`}`
       : `Ingen fick poäng för handen efter byte ${exchangeCount}`],
+  };
+}
+
+/** One authority path for normal score victories and immediate Royal Flush wins. */
+export function digitalMatchWinnerId(game: { players: readonly { id: string; score: number; hasDeclaredChicago?: boolean }[]; settings: GameSettings; royalFlushWinnerId?: string | null }): string | null {
+  return game.royalFlushWinnerId ?? matchWinnerId(game.players, game.settings);
+}
+
+function finishRoyalFlush(game: GameState): GameState {
+  if (game.tableStage !== "exchange") return game;
+  const winner = game.players.find(p => p.hand.length === 5 && isRoyalFlush(evaluateHand(p.hand)));
+  if (!winner) return game;
+  const hands = Object.fromEntries(game.players.map(p => [p.id, [...p.hand]]));
+  // Use the normal hand points (8), independent of Chicago eligibility. The
+  // explicit winner takes precedence over score, including optional score resets.
+  const evaluations = Object.fromEntries(game.players.map(p => [p.id, evaluateHand(p.hand)]));
+  const points = evaluations[winner.id].strength;
+  return { ...game, players: addPoints(game, game.players, winner.id, points),
+    royalFlushWinnerId: winner.id, tableStage: "result", activePlayerId: null,
+    pendingExchange: null, selectedCardIds: [], waitingForNextTrick: false,
+    finalHands: hands,
+    handAwards: [...game.handAwards, { exchangeCount: 3, evaluations, winnerId: winner.id, points }],
+    activity: [...game.activity, `${winner.name} vann med Royal Flush`],
   };
 }
 
@@ -403,7 +436,8 @@ function finishExchange(game: GameState, exchanged: GameState, playerId: string,
       ? singleCardChoice === "accepted" ? "tog det presenterade kortet" : "avstod från det presenterade kortet och fick ett nytt kort"
       : changedCards ? `byter ${changedCards} kort` : "behåller handen"}`],
   };
-  if (submitted.length < game.players.length) return next;
+  next = finishRoyalFlush(next);
+  if (next.tableStage === "result" || submitted.length < game.players.length) return next;
   next = { ...next, exchangeSubmittedPlayerIds: [], exchangeCount,
     activePlayerId: game.roundStarterId ?? game.players[0].id };
   if (exchangeCount < 3) return scorePokerHands(next, exchangeCount,
@@ -747,7 +781,9 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
   if (!game.players.some((p) => p.id === viewerId)) return null;
   const revealed = game.tableStage === "result";
   return {
-    roomCode: game.roomCode, ownerId: game.ownerId, phase: game.phase, tableStage: game.tableStage,
+    roomCode: game.roomCode, matchId: game.matchId, dealNumber: game.dealNumber,
+    initialHandEvaluations: revealed ? game.initialHandEvaluations : undefined,
+    royalFlushWinnerId: game.royalFlushWinnerId ?? null, ownerId: game.ownerId, phase: game.phase, tableStage: game.tableStage,
     players: game.players.map((p) => ({ id: p.id, name: p.name, control: p.control, score: p.score,
       hasDeclaredChicago: p.hasDeclaredChicago ?? false,
       hand: p.id === viewerId ? [...p.hand] : [], handCount: p.hand.length })),

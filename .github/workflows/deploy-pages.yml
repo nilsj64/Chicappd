@@ -27,6 +27,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Check account configuration
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error::Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY repository variables before deploying."
+            exit 1
+          fi
       - run: npm run build
         env:
           VITE_MULTIPLAYER_API_URL: ${{ vars.MULTIPLAYER_API_URL }}

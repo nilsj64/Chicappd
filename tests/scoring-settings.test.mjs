@@ -46,7 +46,7 @@ for (const firstChicagoBreakBonus of [false, true]) {
       let room = applyCommand(createRoom("Ada", "ABCDE", "ada"), { type: "add-human", actorId: "ada", playerId: "bea", name: "Bea" });
       let game = startRound({ ...room, settings });
       game.players = game.players.map((p, index) => ({ ...p, score: index ? 47 : 50,
-        hand: (index ? ["2", "4", "6", "8", "10"] : ["10", "J", "Q", "K", "A"]).map(rank => ({ id: `${index ? "hearts" : "spades"}-${rank}`, rank, suit: index ? "hearts" : "spades" })) }));
+        hand: (index ? ["2", "4", "6", "8", "10"] : ["9", "10", "J", "Q", "K"]).map(rank => ({ id: `${index ? "hearts" : "spades"}-${rank}`, rank, suit: index ? "hearts" : "spades" })) }));
       const held = new Set(game.players.flatMap(p => p.hand.map(c => c.id)));
       game.deck = createDeck().filter(c => !held.has(c.id));
       game = applyCommand(game, { type: "exchange", actorId: "ada", discardIds: [] });

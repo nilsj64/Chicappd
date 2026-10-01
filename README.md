@@ -27,7 +27,7 @@ The frontend includes `@supabase/supabase-js` and a lazy, shared client in `src/
 
 In `.env.local`, set `VITE_SUPABASE_URL` to your Supabase project URL and `VITE_SUPABASE_PUBLISHABLE_KEY` to its public publishable key from the project's Connect dialog / API settings. Restart Vite after changing these values. Leave either value blank to disable Supabase; malformed URLs also return `null` with a configuration warning. These are public, build-time browser values: never put a secret key or service-role credential in a `VITE_*` variable. The client uses the [official JavaScript initialization API](https://supabase.com/docs/reference/javascript/initializing).
 
-For GitHub Pages, add repository Actions variables `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`; the existing workflow passes them to Vite. Rebuild/redeploy when they change. Missing variables leave the foundation disabled.
+For GitHub Pages, add repository Actions variables `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`; the existing workflow passes them to Vite. Rebuild/redeploy when they change. The Pages workflow now rejects missing account variables before publishing. The existing public deployment was built without these variables; set both and rebuild to restore its account form.
 
 ### Username/password accounts
 
@@ -41,7 +41,7 @@ Supabase persists and refreshes sessions under `chicappd-supabase-auth`; reloads
 
 No password recovery is available. The creation form tells users to save their password; a forgotten password cannot be recovered through this app. No email collection or profile editing is implemented. Direct Auth API clients can create identifiers outside the app's username convention; they are outside this UI's supported account flow and grant no extra data access.
 
-No profile table is required: Supabase Auth stores the identity, and the app derives its label without another table. Multiplayer seats remain under `chicappd-online-session`, online rooms remain in Cloudflare Durable Object storage, and active local CPU rooms use React state. Completed digital rounds also have the archive described below.
+No profile table is required: Supabase Auth stores the identity, and the app derives its label without another table. The signed-in status shows the account creation date from Auth `user.created_at`, formatted with the selected locale (Swedish or British English). Editable user metadata is not used for this date. Digital create/join forms automatically use the authenticated username; guest and opponent names retain their existing flow. Worker names accept all 24 characters allowed by accounts; guest forms still use the existing 20-character limit. Multiplayer seats remain under `chicappd-online-session`, online rooms remain in Cloudflare Durable Object storage, and active local CPU rooms use React state. Completed digital rounds also have the archive described below.
 
 ### Cloud history for the physical-card scorekeeper
 
@@ -59,9 +59,19 @@ Sync runs at account restoration/sign-in, after edits, when the app regains visi
 
 Run `npm test`, `npm run build`, and `npm run server:check`. The explicit `npm run test:history:live` uses `.env.local`, creates two dedicated test accounts/data, verifies guest import/retries/fresh-session persistence and direct cross-user RLS queries, and leaves those accounts for inspection. It does not modify unrelated data. Regular tests never contact Supabase.
 
-### Digital round history
+### Digital player statistics
 
-Account controls distinguish guest history on this device from history saved to an account. Both history views offer account controls and separate physical-match / digital-deal navigation. Pending saves and temporary connection failures keep local results visible and offer the existing retry action. These are presentation changes only; auth and persistence behavior are unchanged.
+The digital view is a compact cumulative player profile, with games played, wins, losses, win percentage, current/longest streak, best/average score, best hand and Royal Flush count. Expandable hand counts include all nine evaluator categories, with Royal Flushes counted separately. Physical-card history and its sync engine are unchanged.
+
+Games, wins and losses count **decided matches**, according to the existing Chicago/score winner rule or the new immediate Royal Flush rule. A finished deal with no match winner (including tied eligible scores) is not forced into a win, loss or draw: play continues. Score statistics use the local player's cumulative score at the end of each completed deal; hand counts use one final hand per completed deal, while best hand considers initial and intermediate scoring evaluations as well. Streaks follow completed match outcomes in result timestamp order. The UI explains the difference between matches and deals.
+
+Results remain internal immutable JSON records in the existing `irl_history` table, filtered by `game.kind = digital`; no SQL migration or RLS change is needed. New payloads add the player's seat ID, match UUID, deal number, explicit match winner and evaluator outputs. Result UUIDs derive from source/match/deal/seat, so replaying a result or changing a room revision does not duplicate it. Per-user caches, guest backups, guest imports, failed-sync retry queues, paging and owner UUID authorization reuse the existing history engine. No valid historical results are deleted or rewritten.
+
+Older final hands can be reconstructed from the five public trick records using the existing evaluator. Old local results use the original first seat as the local player; old online results count only when the account username identifies one unique seat. Unidentifiable online records remain stored, are excluded from personal aggregates, and are explained in the UI. Initial/intermediate hands discarded by the old payload cannot be recovered, so their best-hand baseline uses the final hand. Historical incomplete matches do not increase games played.
+
+A true Royal Flush is an evaluated ace-high Straight Flush: 10/J/Q/K/A in one suit. It ends the game immediately on dealing or an accepted/replacement exchange, before the next seat acts. It uses the existing 8 poker points and score-reset setting, and its explicit winner bypasses Chicago eligibility even if the optional score reset returns that score to zero. Ordinary Straight Flushes retain their existing behavior. Result UI, podium and persistence use the same winner. Both initial dealing and shared online authority run this logic; deploy the Worker together with the frontend.
+
+Run `npm run test:digital-history:live` to check guest merge, aggregate restoration, repeat sign-in, failed-sync recovery and cross-user RLS using dedicated test accounts. Regular automated tests include Royal Flush detection/instant wins and cumulative statistics. Live fixtures remain on dedicated test accounts for inspection.
 
 ### Language
 
@@ -69,13 +79,7 @@ Swedish is the default. The small **Språk / Language** selector above the app s
 
 `src/translations.ts` is the typed copy catalog. Swedish source phrases serve as stable keys, with natural English translations and optional improved Swedish wording. Use `useI18n().t(key, values)` for UI copy and indexed `{0}` placeholders for dynamic values. `src/locale.ts` translates known canonical game/Worker messages at the display boundary, including older saved summaries, without rewriting history or translating player names. New generated message formats should be added there with focused tests. Brand names, player/user names, room codes and printed card symbols remain unchanged. Language names are shown in their own languages. No translation dependency, schema or persistence changes are needed. `tests/locale.test.mjs` and `tests/localized-ui.test.mjs` cover choice persistence, messages, advice and representative real views in both languages.
 
-The landing page's **Digital spelhistorik** opens a read-only archive of completed local and online rounds. Each result saves public scores, settings, hand awards and played tricks; private hands, deck order and Worker seat tokens are excluded. Active games and their controls keep their existing behavior. This is a result archive, not a way to resume unfinished local games; rounds played before this feature were only in memory and cannot be recovered.
-
-Digital results use the same `public.irl_history` table, owning Auth UUID, composite primary key, grants and RLS policies. The original JSON constraint already supports this payload, so no additional migration is required. A `kind: "digital"` tag separates digital results from the original physical payloads, which have no kind tag. Both remote adapters filter by type before pagination.
-
-The same `HistoryStore` implements imports, per-account caching, serialized writes, acknowledgement tracking and connectivity/visibility/manual retries for both formats. Guests use `chicappd-digital-history`; accounts use `chicappd-digital-history-<UUID>`. Sign-in/signup copies every guest result into the account without deleting the guest archive or existing cloud results. Sign-out restores the guest archive. Pending account results remain in that account's local queue when a request fails, including after a reload.
-
-Completed results are immutable. Their record/revision UUID is derived from a SHA-256 digest of the public result, including room code and the online Worker revision. Reprocessing a result after renders, reconnection, reload or guest import produces the same ID. Identical local results in the same room (including the same dealt/played cards and scores) collapse into one entry because the existing local game has no durable round identifier. There is no realtime history subscription or cloud restoration of active games. Local archives/caches share the physical history's single-active-tab and device-storage limitations.
+The landing page's **Digital spelarstatistik** opens the cumulative profile described above. Active games cannot be restored from statistics; only completed results are retained. Results before digital persistence existed were only in memory and cannot be recovered. There are no realtime history subscriptions. Local archives/caches retain the existing single-active-tab and device-storage limitations.
 
 `npm run test:digital-history:live` uses `.env.local` and the dedicated `historya_mupp5xxm` / `historyb_mupp5xxm` test accounts left by the original live history check. It adds two digital result fixtures, checks fresh sessions/imports/retries/direct RLS queries, and asserts existing physical records stay unchanged. It does not edit or remove unrelated records. Normal unit tests cover digital captures and persistence without contacting Supabase.
 

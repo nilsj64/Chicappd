@@ -40,7 +40,7 @@ export function supportAdvice(view: GameView, viewerId: string, language: Langua
   }
 
   if (view.tableStage === "result") return {
-    context: t("Rundan är slut. Bästa handen efter första och andra bytet och vid rundans slut gav poäng. Sista sticket gav {0} poäng.", [finalTrickPoints(view.settings)]),
+    context: view.royalFlushWinnerId ? t("Matchen är avgjord. Royal Flush ger omedelbar vinst utan stickspel.") : t("Rundan är slut. Bästa handen efter första och andra bytet och vid rundans slut gav poäng. Sista sticket gav {0} poäng.", [finalTrickPoints(view.settings)]),
     tips: [],
   };
 
