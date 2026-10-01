@@ -120,10 +120,48 @@ test("Chicago is available off-turn and priority follows the rotated starter, in
     let game = base;
     for (const id of order) game = applyCommand(game, { type: "declare-chicago", actorId: id });
     assert.equal(game.chicagoPlayerId, "dan");
+    assert.equal(game.activePlayerId, "dan");
+    assert.equal(game.roundStarterId, "cid");
   }
   const historic = { ...base, players: base.players.map((p) => p.id === "ada" ? { ...p, hasDeclaredChicago: true } : p) };
   let game = applyCommand(historic, { type: "declare-chicago", actorId: "ada" });
   game = applyCommand(game, { type: "declare-chicago", actorId: "cid" });
   game = applyCommand(game, { type: "play-card", actorId: "cid", cardId: game.players[2].hand[0].id });
   assert.equal(game.players[0].hasDeclaredChicago, true);
+});
+
+
+test("the Chicago claimant leads, turn order wraps once and only the trick winner leads next", () => {
+  let room = createRoom("Ada", "ABCDE", "ada");
+  for (const id of ["bea", "cid", "dan"]) room = applyCommand(room, { type: "add-human", actorId: "ada", playerId: id, name: id });
+  let game = { ...startRound(room), tableStage: "tricks", exchangeCount: 3,
+    roundStarterId: "cid", activePlayerId: "cid", selectedCardIds: ["stale-selection"] };
+  game.players = game.players.map(p => ({ ...p, score: 15 }));
+  const original = game;
+  game = applyCommand(game, { type: "declare-chicago", actorId: "dan" });
+  assert.equal(game.activePlayerId, "dan");
+  assert.equal(game.roundStarterId, "cid");
+  assert.deepEqual(game.selectedCardIds, []);
+  assert.strictEqual(applyCommand(game, { type: "play-card", actorId: "cid", cardId: game.players[2].hand[0].id }), game);
+  for (const id of ["dan", "ada", "bea", "cid"]) {
+    assert.equal(game.activePlayerId, id);
+    const player = game.players.find(p => p.id === id);
+    const suit = game.currentTrick[0]?.card.suit;
+    const card = player.hand.find(c => c.suit === suit) ?? player.hand[0];
+    game = applyCommand(game, { type: "play-card", actorId: id, cardId: card.id });
+  }
+  assert.equal(game.completedTricks.length, 1);
+  assert.deepEqual(game.completedTricks[0].cards.map(p => p.playerId), ["dan", "ada", "bea", "cid"]);
+  assert.ok(game.players.every(p => p.hand.length === 4));
+  assert.deepEqual(game.players.filter(p => p.hasDeclaredChicago).map(p => p.id), ["dan"]);
+  assert.equal(game.activePlayerId, game.completedTricks[0].winnerId);
+  game = applyCommand(game, { type: "continue-trick", actorId: "ada" });
+  assert.equal(game.activePlayerId, game.completedTricks[0].winnerId);
+  assert.equal(game.waitingForNextTrick, false);
+  // A higher-priority claimant takes both Chicago and the lead before the first card.
+  let takeover = applyCommand(original, { type: "declare-chicago", actorId: "dan" });
+  takeover = applyCommand(takeover, { type: "declare-chicago", actorId: "cid" });
+  assert.equal(takeover.chicagoPlayerId, "cid");
+  assert.equal(takeover.activePlayerId, "cid");
+  assert.equal(takeover.roundStarterId, "cid");
 });

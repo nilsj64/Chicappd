@@ -52,6 +52,8 @@ test("single-card choice is shared online while the rejected replacement stays p
     assert.ok(hidden);
     const guestAfter = (await call(`/rooms/${code}/state`, { token: guest.token })).view;
     assert.equal(JSON.stringify(guestAfter).includes(hidden.id), false);
+    assert.equal(guestAfter.exchangeEvents[0].singleCardChoice, "rejected");
+    assert.ok(guestAfter.activity.some(message => message.includes("Ada avstod från det presenterade kortet och fick ett nytt kort")));
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
       body: { type: "exchange-choice", accept: true } })).status, 409);
     const guestCard = guestAfter.players[1].hand[0].id;
@@ -64,6 +66,9 @@ test("single-card choice is shared online while the rejected replacement stays p
       body: { type: "exchange-choice", accept: true } });
     assert.equal(accepted.status, 200);
     assert.equal(accepted.view.players[1].hand.some((card) => card.id === offered.view.pendingExchange.card.id), true);
+    const ownerAfter = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+    assert.equal(ownerAfter.exchangeEvents.at(-1).singleCardChoice, "accepted");
+    assert.ok(ownerAfter.activity.some(message => message.includes("Bo tog det presenterade kortet")));
   } finally {
     await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token });
     await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token });

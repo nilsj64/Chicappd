@@ -12,7 +12,7 @@ export function canExchangeCards(score: number): boolean {
 }
 
 export function matchWinnerId(players: readonly { id: string; score: number; hasDeclaredChicago?: boolean }[]): string | null {
-  const eligible = players.filter((player) => player.score >= winningScore && player.hasDeclaredChicago);
+  const eligible = players.filter((player) => player.score > winningScore && player.hasDeclaredChicago);
   if (!eligible.length) return null;
   const highest = Math.max(...eligible.map((player) => player.score));
   const leaders = eligible.filter((player) => player.score === highest);

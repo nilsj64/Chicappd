@@ -59,7 +59,7 @@ test("first Chicago breaker gets 10 and negative setting controls floor", () => 
   }
 });
 
-test("physical match waits for a Chicago declaration before awarding a 52-point win", () => {
+test("physical match requires Chicago and more than 52 points to end", () => {
   let game = createIRLGame(players, settings);
   game = correctIRLScore(game, "irl-1", 52);
   game = recordFirstHands(game, [null, null]);
@@ -72,6 +72,8 @@ test("physical match waits for a Chicago declaration before awarding a 52-point 
   game = finishIRLDeal(game, { finalHand: null, finalTrickWinnerId: "irl-2", chicagoWon: false, breakerId: "irl-2" });
   assert.equal(game.players[0].hasDeclaredChicago, true);
   game = correctIRLScore(game, "irl-1", 52);
+  assert.notStrictEqual(nextIRLDeal(game), game);
+  game = correctIRLScore(game, "irl-1", 53);
   assert.strictEqual(nextIRLDeal(game), game);
 });
 

@@ -189,7 +189,7 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
         }}>{newMatchReady ? "Bekräfta ny match (nollställ)" : "Starta ny match"}</button>
         {newMatchReady && <button type="button" onClick={() => setNewMatchReady(false)}>Avbryt</button>}
       </div><div className="irl-rules"><strong>REGLER</strong><p>Bästa handen ger 1–8 poäng efter byte 1, byte 2 och vid givens slut. Sista sticket ger {finalTrickPoints(game.settings)} poäng.</p>
-        <p>52 poäng vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.</p>
+        <p>Över 52 poäng (minst 53) vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.</p>
         <p>Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15. Den som först bryter får +10.</p>
         <p>{game.settings.allowNegativeScores ? "Minuspoäng tillåts." : "Totalpoäng stannar vid 0."}</p></div></aside>
     </main>}

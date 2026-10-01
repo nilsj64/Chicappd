@@ -19,7 +19,7 @@ import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
-import { canExchangeCards, matchWinnerId, scoreStandings } from "./scoring";
+import { canExchangeCards, chicagoBreakPoints, matchWinnerId, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
@@ -562,8 +562,9 @@ function ExchangeFlight({ event, playerName, own }: {
     {cards.map((style, index) => <div className="exchange-flight-card" style={style} key={index} aria-hidden="true">
       <CardBack small />
     </div>)}
-    <div className="exchange-playback-label">{playerName} {event.changedCards
-      ? `byter ${event.changedCards} kort` : "behåller handen"}</div>
+    <div className="exchange-playback-label">{playerName} {event.singleCardChoice
+      ? event.singleCardChoice === "accepted" ? "tog det presenterade kortet" : "avstod från kortet och fick ett nytt"
+      : event.changedCards ? `byter ${event.changedCards} kort` : "behåller handen"}</div>
   </div>;
 }
 
@@ -662,7 +663,7 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
         ))}
       </div>
       <div className="score-foot">
-        ✓ = har sagt Chicago · 52 poäng krävs för vinst. Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.
+        ✓ = har sagt Chicago · Över 52 poäng krävs för vinst (minst 53). Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.
       </div>
     </aside>
   );
@@ -818,7 +819,7 @@ function Table({
     disabled={exchangeBusy || !!exchangePlayback || !yourExchangeTurn || !!pendingExchange}
   >
     {selectionCount ? `Byt ${selectionCount} kort`
-      : exchangeAllowed ? "Behåll handen" : "Behåll handen · 46+ poäng"}
+      : "Behåll handen"}
     <Icon name="arrow-right" />
   </button>;
   const legalTrickIds = new Set(playingTricks
@@ -893,8 +894,8 @@ function Table({
                 {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
                   Chicago: <strong>{chicagoPlayer.name}</strong> satsar på alla stick
-                  {!game.currentTrick.length && !game.completedTricks.length && <small>Första utspelaren har företräde, därefter gäller spelordningen. Valet låses vid första kortet.</small>}
-                  {chicagoBreaker && <small>Bruten av {chicagoBreaker.name} · +10 p</small>}
+                  {!game.currentTrick.length && !game.completedTricks.length && <small>Ordinarie första utspelaren har företräde, därefter gäller spelordningen. Chicago-spelaren börjar; valet låses vid första kortet.</small>}
+                  {chicagoBreaker && <small>{chicagoBreaker.name} bröt Chicago och får {chicagoBreakPoints} poäng</small>}
                 </div>}
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
                   <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
@@ -983,7 +984,7 @@ function Table({
                   />
                 ))}
               </div>
-              {exchanging && handAction}
+              {exchanging && exchangeAllowed && handAction}
               {playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
                 <button type="button" className="button chicago-button" onClick={onDeclareChicago}
                   disabled={!canDeclareChicago || actionBusy || !!flight}>

@@ -47,7 +47,7 @@ export type TrickAward = { winnerId: string; points: number };
 export type GameSettings = { finalTrickPoints: 2 | 5; allowNegativeScores: boolean };
 export type ChicagoAward = { playerId: string; points: 15 | -15 };
 export type ExchangeFeedback = { exchangeCount: 1 | 2 | 3; changedCards: number };
-export type ExchangeEvent = { id: number; exchangeCount: 1 | 2 | 3; playerId: string; changedCards: number };
+export type ExchangeEvent = { id: number; exchangeCount: 1 | 2 | 3; playerId: string; changedCards: number; singleCardChoice?: "accepted" | "rejected" };
 export type PendingExchange = { playerId: string; discardId: string; card: Card };
 export type GameState = {
   roomCode: string;
@@ -377,7 +377,7 @@ function submitExchange(game: GameState, playerId: string, discardedIds: readonl
   return finishExchange(game, exchanged, playerId, discardedIds.length);
 }
 
-function finishExchange(game: GameState, exchanged: GameState, playerId: string, changedCards: number): GameState {
+function finishExchange(game: GameState, exchanged: GameState, playerId: string, changedCards: number, singleCardChoice?: ExchangeEvent["singleCardChoice"]): GameState {
   const playerIndex = game.players.findIndex((player) => player.id === playerId);
   const player = game.players[playerIndex];
   const exchangeCount = nextExchangeCount(game.exchangeCount);
@@ -388,11 +388,13 @@ function finishExchange(game: GameState, exchanged: GameState, playerId: string,
     exchangeEventSerial: (game.exchangeEventSerial ?? 0) + 1,
     exchangeEvents: [...(game.exchangeEvents ?? []), {
       id: (game.exchangeEventSerial ?? 0) + 1, exchangeCount, playerId, changedCards,
+      ...(singleCardChoice ? { singleCardChoice } : {}),
     }],
     activePlayerId: game.players[(playerIndex + 1) % game.players.length].id,
     selectedCardIds: [],
-    activity: [...game.activity, `Byte ${exchangeCount}: ${player.name} ${changedCards
-      ? `byter ${changedCards} kort` : "behåller handen"}`],
+    activity: [...game.activity, `Byte ${exchangeCount}: ${player.name} ${singleCardChoice
+      ? singleCardChoice === "accepted" ? "tog det presenterade kortet" : "avstod från det presenterade kortet och fick ett nytt kort"
+      : changedCards ? `byter ${changedCards} kort` : "behåller handen"}`],
   };
   if (submitted.length < game.players.length) return next;
   next = { ...next, exchangeSubmittedPlayerIds: [], exchangeCount,
@@ -415,19 +417,20 @@ function answerExchange(game: GameState, playerId: string, accept: boolean): Gam
     ...game, pendingExchange: null,
     deck: game.deck.slice(1), discard: [...game.discard, pending.card],
   };
-  return submitAcceptedSingle(ready, playerId, pending.discardId);
+  return submitAcceptedSingle(ready, playerId, pending.discardId, accept);
 }
 
-function submitAcceptedSingle(game: GameState, playerId: string, discardId: string): GameState {
+function submitAcceptedSingle(game: GameState, playerId: string, discardId: string, accept: boolean): GameState {
   // Complete the ordinary exchange without offering the replacement a second time.
   const exchanged = exchangePlayerCards(game, playerId, [discardId]);
   if (exchanged === game) return game;
-  return finishExchange(game, exchanged, playerId, 1);
+  return finishExchange(game, exchanged, playerId, 1, accept ? "accepted" : "rejected");
 }
 
 function runExchangeBots(game: GameState): GameState {
   let next = game;
-  for (let turn = 0; turn < 12 && next.tableStage === "exchange"; turn++) {
+  // At most 12 player exchanges, each with up to one additional offer answer.
+  for (let turn = 0; turn < 24 && next.tableStage === "exchange"; turn++) {
     if (next.pendingExchange) {
       const waiting = next.players.find((player) => player.id === next.pendingExchange?.playerId);
       if (waiting?.control !== "bot") break;
@@ -436,10 +439,10 @@ function runExchangeBots(game: GameState): GameState {
       next = answered;
       continue;
     }
-    const bot = next.players.find((player) => player.id === next.activePlayerId);
-    // If nobody may exchange, also advance human seats through ordinary scoring.
-    if (!bot || (bot.control !== "bot" && next.players.some((player) => canExchangeCards(player.score)))) break;
-    const advanced = submitExchange(next, bot.id, canExchangeCards(bot.score) ? chooseBotDiscards(bot.hand) : []);
+    const player = next.players.find((candidate) => candidate.id === next.activePlayerId);
+    // A locked seat never waits for input, even when other players may exchange.
+    if (!player || (player.control !== "bot" && canExchangeCards(player.score))) break;
+    const advanced = submitExchange(next, player.id, canExchangeCards(player.score) ? chooseBotDiscards(player.hand) : []);
     if (advanced === next) break;
     next = advanced;
   }
@@ -665,7 +668,9 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
         })) };
     case "declare-chicago":
       if (!canPlayerDeclareChicago(game, actor.id)) return game;
-      return { ...game, chicagoPlayerId: actor.id };
+      // Keep roundStarterId unchanged: it anchors priority and next-round rotation.
+      return { ...game, chicagoPlayerId: actor.id, activePlayerId: actor.id,
+        selectedCardIds: [], trickError: null };
     case "add-human":
       if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= 4 ||
         typeof command.playerId !== "string" || !command.playerId || typeof command.name !== "string" ||

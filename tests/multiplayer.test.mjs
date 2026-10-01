@@ -109,6 +109,13 @@ for (const accept of [true, false]) {
     assert.equal(game.pendingExchange, null);
     assert.equal(game.activePlayerId, "human-b");
     assert.equal(game.exchangeEvents.length, 1);
+    assert.equal(game.exchangeEvents[0].singleCardChoice, accept ? "accepted" : "rejected");
+    const opponentView = viewForPlayer(game, "human-b");
+    assert.equal(opponentView.exchangeEvents[0].singleCardChoice, accept ? "accepted" : "rejected");
+    assert.ok(opponentView.activity.some((message) => message.includes(accept
+      ? "Ada tog det presenterade kortet" : "Ada avstod från det presenterade kortet och fick ett nytt kort")));
+    assert.deepEqual(Object.keys(opponentView.exchangeEvents[0]).sort(),
+      ["id", "exchangeCount", "playerId", "changedCards", "singleCardChoice"].sort());
     assert.ok(game.discard.some((card) => card.id === discarded.id));
     assert.equal(game.players[0].hand.some((card) => card.id === (accept ? shown.id : reserve.id)), true);
     assert.equal(game.players[0].hand.some((card) => card.id === (accept ? reserve.id : shown.id)), false);
@@ -351,17 +358,21 @@ test("a CPU at 46 keeps its hand and the room continues", () => {
   assert.deepEqual(game.players[1].hand, botHand);
 });
 
-test("only a player with a past Chicago declaration can finish at 52", () => {
+test("winning requires more than 52 and a past Chicago; equal leaders keep playing", () => {
   const room = humanRoom();
-  const scored = { ...room, players: room.players.map((player) => player.id === "human-a"
-    ? { ...player, score: 52 } : player) };
-  assert.equal(matchWinnerId(scored.players), null);
-  assert.notStrictEqual(applyCommand(scored, { type: "start-round", actorId: "human-a" }), scored);
-  const declared = { ...scored, players: scored.players.map((player) => player.id === "human-a"
-    ? { ...player, hasDeclaredChicago: true } : player) };
-  assert.equal(matchWinnerId(declared.players), "human-a");
-  assert.strictEqual(applyCommand(declared, { type: "start-round", actorId: "human-a" }), declared);
-  assert.deepEqual(matchStandings([{ id: "b", score: 50 }, { id: "a", score: 52 }, { id: "c", score: 40 }], "a")
+  for (const score of [52, 53]) {
+    for (const hasDeclaredChicago of [false, true]) {
+      const game = { ...room, players: room.players.map((player) => player.id === "human-a"
+        ? { ...player, score, hasDeclaredChicago } : player) };
+      const wins = score > 52 && hasDeclaredChicago;
+      assert.equal(matchWinnerId(game.players), wins ? "human-a" : null);
+      const next = applyCommand(game, { type: "start-round", actorId: "human-a" });
+      assert.equal(next === game, wins);
+    }
+  }
+  const tied = room.players.map((p) => ({ ...p, score: 53, hasDeclaredChicago: true }));
+  assert.equal(matchWinnerId(tied), null);
+  assert.deepEqual(matchStandings([{ id: "b", score: 50 }, { id: "a", score: 53 }, { id: "c", score: 40 }], "a")
     .map((player) => player.id), ["a", "b", "c"]);
 });
 
@@ -398,8 +409,6 @@ test("remaining exchanges skip automatically when the last eligible player reach
   const held = new Set(game.players.flatMap((p) => p.hand.map((c) => c.id)));
   game.deck = createDeck().filter((card) => !held.has(card.id));
   game = applyCommand(game, { type: "exchange", actorId: "human-a", discardIds: [] });
-  assert.equal(game.tableStage, "exchange");
-  game = applyCommand(game, { type: "exchange", actorId: "human-b", discardIds: [] });
   assert.equal(game.tableStage, "tricks");
   assert.equal(game.handAwards.length, 2);
   assert.equal(game.activePlayerId, "human-a");
@@ -413,4 +422,33 @@ test("score standings update with totals and retain seat order on ties without c
   players[0].score = 20;
   assert.deepEqual(scoreStandings(players).map((p) => p.id), ["a", "b", "c"]);
   assert.deepEqual(players.map((p) => p.id), ["a", "b", "c"]);
+});
+
+
+test("locked human seats skip automatically in mixed exchanges, including a locked starter", () => {
+  for (const starter of ["human-a", "human-b", "human-c", "human-d"]) {
+    let room = humanRoom();
+    for (const id of ["human-c", "human-d"]) room = applyCommand(room, { type: "add-human", actorId: "human-a", playerId: id, name: id });
+    const previous = room.players[(room.players.findIndex(p => p.id === starter) + 3) % 4].id;
+    room = { ...room, roundStarterId: previous, players: room.players.map(p => ({ ...p,
+      score: ["human-a", "human-c"].includes(p.id) ? 47 : 0 })) };
+    let game = applyCommand(room, { type: "start-round", actorId: "human-a" });
+    const lockedHands = game.players.filter(p => p.score >= 46).map(p => [p.id, p.hand]);
+    let manualActions = 0;
+    while (game.tableStage === "exchange") {
+      const player = game.players.find(p => p.id === game.activePlayerId);
+      assert.ok(player.score < 46, "a locked player must never wait for a manual action");
+      const next = applyCommand(game, { type: "exchange", actorId: player.id, discardIds: [] });
+      assert.notStrictEqual(next, game);
+      game = next;
+      assert.ok(++manualActions <= 6);
+    }
+    assert.equal(manualActions, 6);
+    assert.equal(game.activePlayerId, starter);
+    assert.equal(game.roundStarterId, starter);
+    assert.equal(game.exchangeCount, 3);
+    assert.equal(game.handAwards.length, 2);
+    assert.equal(game.exchangeEvents.length, 12);
+    for (const [id, hand] of lockedHands) assert.deepEqual(game.players.find(p => p.id === id).hand, hand);
+  }
 });
