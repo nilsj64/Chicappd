@@ -26,7 +26,8 @@ import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
 import { canExchangeCards, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
-import MonkeyDealer from "./MonkeyDealer";
+import ChibiDealer from "./ChibiDealer";
+import { DEALER_RELEASE_MS, EXCHANGE_STAGGER_MS, exchangePlaybackMs } from "./dealerAnimation";
 import { useAccountHistory } from "./HistoryProvider";
 import { accountName } from "./account";
 import { digitalResult, digitalResultId } from "./digitalHistory";
@@ -517,7 +518,7 @@ function ExchangeFlight({ event, playerName, own }: {
       height: from.height,
       "--exchange-x": `${to.left + to.width / 2 - from.left - from.width / 2}px`,
       "--exchange-y": `${to.top + to.height / 2 - from.top - from.height / 2}px`,
-      animationDelay: `${index * 65}ms`,
+      animationDelay: `${DEALER_RELEASE_MS + index * EXCHANGE_STAGGER_MS}ms`,
     } as CSSProperties)));
   }, [event.id, event.changedCards, event.playerId, own]);
   return <div className="exchange-playback" aria-live="polite">
@@ -726,8 +727,11 @@ function Table({
   const chicagoBreaker = game.players.find((player) => player.id === game.chicagoBreakerId);
   const canDeclareChicago = canPlayerDeclareChicago(game, viewerId);
   const [showExchangeFeedback, setShowExchangeFeedback] = useState(false);
-  const seenExchangeEvent = useRef(0);
+  // Mounting/rejoining a table must not replay historical exchanges.
+  const seenExchangeEvent = useRef(game.exchangeEvents.at(-1)?.id ?? 0);
   const [exchangeQueue, setExchangeQueue] = useState<ExchangeEvent[]>([]);
+  const [initialDeal] = useState(game.exchangeCount === 0 && !game.currentTrick.length &&
+    !game.completedTricks.length && game.tableStage !== "result");
   useEffect(() => {
     const fresh = game.exchangeEvents.filter((event) => event.id > seenExchangeEvent.current);
     if (!fresh.length) return;
@@ -737,10 +741,11 @@ function Table({
   useEffect(() => {
     if (!exchangeQueue.length) return;
     const timer = window.setTimeout(() => setExchangeQueue((queue) => queue.slice(1)),
-      exchangeQueue[0].changedCards ? 620 + 65 * (exchangeQueue[0].changedCards - 1) : 450);
+      exchangePlaybackMs(exchangeQueue[0]));
     return () => window.clearTimeout(timer);
   }, [exchangeQueue]);
   const exchangePlayback = exchangeQueue[0];
+  const ownExchange = game.exchangeEvents.filter(event => event.playerId === viewerId).at(-1);
   const dragRef = useRef<{ id: string; pointerId: number; x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef<string | null>(null);
   function finishDrag(event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) {
@@ -792,7 +797,8 @@ function Table({
     ? legalCards(local.hand, game.currentTrick[0]?.card.suit ?? null).map((card) => card.id)
     : []);
   return (
-    <div className="table-page">
+    <div className={`table-page ${initialDeal ? "dealer-initial-deal" : ""}`}
+      style={{ "--dealer-release-delay": `${DEALER_RELEASE_MS}ms` } as CSSProperties}>
       <header className="table-header">
         <Brand light />
         <div className="table-header-center">
@@ -810,8 +816,8 @@ function Table({
         <section className="felt-wrap">
           <div className={`felt ${game.players.length > 4 ? "felt-many" : ""} ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
-            <MonkeyDealer key={game.roundStarterId} exchange={exchangePlayback}
-              initialDeal={exchanging || (playingTricks && !game.currentTrick.length && !game.completedTricks.length)}
+            <ChibiDealer exchange={exchangePlayback}
+              initialDeal={initialDeal}
               presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
             {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{game.exchangeCount + 1} {" "}{t("av 3")}</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
@@ -849,7 +855,8 @@ function Table({
                   <DiscardPile count={visibleDiscard} />
                 </div>
               </div>
-              {pendingExchange && <div className="exchange-offer" aria-live="polite">
+              {pendingExchange && <div key={`${pendingExchange.playerId}:${game.exchangeCount}:${pendingExchange.card.id}`}
+                className="exchange-offer" aria-live="polite">
                 <strong>{game.players.find((player) => player.id === pendingExchange.playerId)?.name} {" "}{t("byter ett kort")}</strong>
                 <span>{t("Första nya kortet")}</span>
                 <PlayingCard card={pendingExchange.card} />
@@ -917,8 +924,10 @@ function Table({
                 currentCardIds={currentCardIds} flight={flight} onCardLanded={onCardLanded} />}
               <div className="your-hand">
                 {local.hand.map((card) => (
+                  <div key={card.id} className={exchanging || initialDeal || exchangePlayback ? "dealer-card-reveal" : undefined}
+                    style={ownExchange?.singleCardChoice === "accepted"
+                      ? { "--dealer-release-delay": "0ms" } as CSSProperties : undefined}>
                   <PlayingCard
-                    key={card.id}
                     card={card}
                     selected={exchanging && selectedCardIds.includes(card.id)}
                     unavailable={(exchanging && (!yourExchangeTurn || !!pendingExchange || !exchangeAllowed)) ||
@@ -951,6 +960,7 @@ function Table({
                     onPointerUp={playingTricks ? (event) => finishDrag(event) : undefined}
                     onPointerCancel={playingTricks ? (event) => finishDrag(event, true) : undefined}
                   />
+                  </div>
                 ))}
               </div>
               {exchanging && exchangeAllowed && handAction}
@@ -1252,6 +1262,7 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
       onLeave={() => void leave()} />{error && <div className="network-message" role="alert">{errorMessage(error)}</div>}
       {online && !connected && <div className="network-message" role="status">{t("Återansluter till spelservern…")}</div>}</>;
   return <><Table
+    key={`${view.matchId}:${view.dealNumber}`}
     game={view}
     viewerId={viewerId}
     online={online}
