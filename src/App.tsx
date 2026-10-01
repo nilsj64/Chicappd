@@ -22,6 +22,10 @@ import { Icon, SuitIcon } from "./Icon";
 import { canExchangeCards, chicagoBreakPoints, matchWinnerId, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
 import MonkeyDealer from "./MonkeyDealer";
+import AccountControl from "./AccountControl";
+import { useAccountHistory } from "./HistoryProvider";
+import { digitalResult, digitalResultId } from "./digitalHistory";
+import DigitalHistoryPanel from "./DigitalHistoryPanel";
 
 type CardFlight = PlayedCard & { from: { x: number; y: number; width: number; height: number } };
 const CARD_FLIGHT_MS = 360;
@@ -128,7 +132,7 @@ function Avatar({
   );
 }
 
-function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; onPhysical: () => void }) {
+function Landing({ onEnter, onPhysical, onHistory }: { onEnter: (mode: EntryMode) => void; onPhysical: () => void; onHistory: () => void }) {
   return (
     <div className="landing-page">
       <header className="landing-header page-width">
@@ -136,6 +140,7 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
         <span className="header-note">
           Kortkväll tillsammans, var ni än är <span><BrandMark /></span>
         </span>
+        <AccountControl />
       </header>
       <main className="landing-main page-width">
         <div className="hero-copy">
@@ -169,7 +174,11 @@ function Landing({ onEnter, onPhysical }: { onEnter: (mode: EntryMode) => void; 
             <span className="footnote-icon"><BrandMark /></span> {API_URL
               ? "Onlinerum för upp till fyra spelare" : "Spela lokalt med upp till tre CPU-spelare"}
           </div>
-          <button className="text-button" onClick={onPhysical}>Spela med fysiska kort <Icon name="arrow-right" /></button>
+          <nav className="landing-history" aria-label="Poäng och historik">
+            <span className="form-kicker">POÄNG OCH HISTORIK</span>
+            <button onClick={onPhysical}><span>Fysiska kort<small>Poängräknare och sparade matcher</small></span><Icon name="arrow-right" /></button>
+            <button onClick={onHistory}><span>Digital spelhistorik<small>Resultat från avslutade givar</small></span><Icon name="arrow-right" /></button>
+          </nav>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="art-ring art-ring-one" />
@@ -1061,6 +1070,8 @@ function Table({
 }
 
 export default function App() {
+  const { digitalStore } = useAccountHistory();
+  const [digitalHistoryOpen, setDigitalHistoryOpen] = useState(false);
   const [physicalOpen, setPhysicalOpen] = useState(false);
   const [mode, setMode] = useState<EntryMode>(null);
   const [game, setGame] = useState<GameState | null>(null);
@@ -1080,6 +1091,15 @@ export default function App() {
   onlineSessionRef.current = onlineSession;
   const online = !!onlineSession;
   const view = online ? remoteView : game && viewerId ? viewForPlayer(game, viewerId) : null;
+
+  useEffect(() => {
+    if (!view) return;
+    const result = digitalResult(view, online ? "online" : "local");
+    if (!result) return;
+    const owner = digitalStore.getSnapshot().ownerId;
+    void digitalResultId(result).then(id => digitalStore.append(id, result, owner))
+      .catch(() => setError("Kunde inte spara spelhistoriken på den här enheten."));
+  }, [game, remoteView, viewerId, online, digitalStore]);
 
   useEffect(() => {
     if (!onlineSession) return;
@@ -1257,7 +1277,10 @@ export default function App() {
     }
     clearRoom();
   }
-  if (physicalOpen) return <IRLTable onExit={() => setPhysicalOpen(false)} />;
+  if (physicalOpen) return <IRLTable onExit={() => setPhysicalOpen(false)} onDigital={() => { setPhysicalOpen(false); setDigitalHistoryOpen(true); }} />;
+  if (digitalHistoryOpen) return <DigitalHistoryPanel onBack={() => setDigitalHistoryOpen(false)}
+    onPhysical={() => { setDigitalHistoryOpen(false); setPhysicalOpen(true); }}
+    onPlay={() => { setDigitalHistoryOpen(false); setMode("create"); }} />;
   if (onlineSession && !view) return <div className="entry-page"><div className="page-width entry-layout"><div>
     <Brand /><h1>Återansluter till rummet…</h1>
     {error && <p role="alert">{error}</p>}
@@ -1266,7 +1289,7 @@ export default function App() {
   if (!view || !viewerId)
     return mode ? (
       <Entry key={mode} mode={mode} onBack={() => setMode(null)} onSubmit={enterRoom} error={error} busy={busy} />
-    ) : <Landing onEnter={setMode} onPhysical={() => setPhysicalOpen(true)} />;
+    ) : <Landing onEnter={setMode} onPhysical={() => setPhysicalOpen(true)} onHistory={() => setDigitalHistoryOpen(true)} />;
   if (view.phase === "lobby")
     return <><Lobby game={view} viewerId={viewerId} online={online}
       onSettings={(settings) => {

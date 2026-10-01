@@ -30,6 +30,8 @@ jobs:
       - run: npm run build
         env:
           VITE_MULTIPLAYER_API_URL: ${{ vars.MULTIPLAYER_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

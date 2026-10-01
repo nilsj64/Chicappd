@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { GameSettings } from "./game";
 import { handCategories, handCategoryPoints } from "./poker";
 import type { HandCategory } from "./poker";
@@ -8,20 +8,14 @@ import type { HandResult, IRLGame } from "./irl";
 import Brand, { BrandMark } from "./Brand";
 import { MatchPodium } from "./MatchPodium";
 import { Icon, SuitIcon } from "./Icon";
+import { useAccountHistory } from "./HistoryProvider";
+import AccountControl from "./AccountControl";
+import HistoryStatus from "./HistoryStatus";
 
-const storageKey = "chicappd-irl-game";
 const categories: Record<HandCategory, string> = {
   "high-card": "Högt kort", "one-pair": "Par", "two-pair": "Två par", "three-of-a-kind": "Triss",
   straight: "Stege", flush: "Färg", "full-house": "Kåk", "four-of-a-kind": "Fyrtal", "straight-flush": "Färgstege",
 };
-
-function savedGame(): IRLGame | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(storageKey) ?? "null") as IRLGame | null;
-    return value && Array.isArray(value.players) && Array.isArray(value.history) &&
-      ["hands", "tricks", "result"].includes(value.phase) ? value : null;
-  } catch { return null; }
-}
 
 function RuleSettings({ settings, onChange }: { settings: GameSettings; onChange: (settings: GameSettings) => void }) {
   return <div className="irl-settings">
@@ -67,8 +61,15 @@ function HandPicker({ title, game, value, onChange }: { title: string; game: IRL
   </fieldset>;
 }
 
-export default function IRLTable({ onExit }: { onExit: () => void }) {
-  const [game, setGame] = useState<IRLGame | null>(savedGame);
+export default function IRLTable({ onExit, onDigital }: { onExit: () => void; onDigital: () => void }) {
+  const { user, history } = useAccountHistory();
+  return <IRLMatch key={`${user?.id ?? "guest"}:${history.selectedId ?? "new"}`} onExit={onExit} onDigital={onDigital} />;
+}
+
+function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => void }) {
+  const { history, store, user, loading: accountLoading } = useAccountHistory();
+  const game = history.records.find(r => r.id === history.selectedId)?.game ?? null;
+  const setGame = store.setGame;
   const [names, setNames] = useState(["", ""]);
   const [settings, setSettings] = useState<GameSettings>({ ...defaultSettings });
   const [setupError, setSetupError] = useState("");
@@ -82,10 +83,6 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
   const [correctionReady, setCorrectionReady] = useState(false);
   const [resultError, setResultError] = useState("");
   const [newMatchReady, setNewMatchReady] = useState(false);
-  useEffect(() => {
-    if (game) localStorage.setItem(storageKey, JSON.stringify(game));
-    else localStorage.removeItem(storageKey);
-  }, [game]);
 
   function startMatch() {
     const created = createIRLGame(names, settings);
@@ -118,11 +115,25 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
       <button type="button" onClick={onExit}><Icon name="arrow-left" /> Huvudmeny</button>
       {game && <div className="irl-mobile-score">{game.players.map((player) => <span key={player.id}>{player.name} <strong>{player.score}</strong></span>)}</div>}
     </header>
+    <section className="irl-history-bar" aria-label="Fysiska matcher och historik">
+      <nav className="history-nav" aria-label="Spelhistorik"><button aria-current="page">Fysiska matcher</button><button onClick={onDigital}>Digitala givar</button></nav>
+      <AccountControl showHistoryStatus={false} />
+      <HistoryStatus history={history} signedIn={!!user} onRetry={() => void store.sync()} />
+      {user && history.records.length > 0 && <label>Sparad fysisk match <select value={history.selectedId ?? ""} disabled={history.loading}
+        onChange={(event) => store.select(event.target.value)}>
+        <option value="" disabled>Välj match</option>
+        {[...history.records].sort((a,b) => b.updated_at.localeCompare(a.updated_at)).map(record => <option key={record.id} value={record.id}>
+          {record.game.players.map(p => p.name).join(" · ")} — giv {record.game.dealNumber} · {new Date(record.updated_at).toLocaleString("sv-SE")}
+        </option>)}
+      </select></label>}
+    </section>
+    {(accountLoading || (history.loading && !game)) ? <p className="irl-sync-loading" role="status">Hämtar sparad match…</p> : <>
     {!game ? <main className="irl-setup">
       <div className="eyebrow"><span className="suit-row"><SuitIcon suit="spades" /><SuitIcon suit="hearts" />
         <SuitIcon suit="diamonds" /><SuitIcon suit="clubs" /></span> SAMMA REGLER, RIKTIGA KORT</div>
       <h1>Samla spelarna <em>runt bordet.</em></h1>
       <p>Ta fram en kortlek. Appen håller poängen medan ni spelar.</p>
+      <p className="history-explainer">{user ? history.records.length ? "Starta en ny match eller välj en sparad match ovan. Varje match sparas på ditt konto." : "Din första match börjar här. Poängen sparas på ditt konto medan ni spelar." : "Din senaste match sparas på den här enheten. Logga in om du vill spara flera matcher och fortsätta på andra enheter."}</p>
       <section className="irl-card">
         <h2>Vilka spelar?</h2>
         <div className="irl-name-list">{names.map((name, index) => <label key={index}>Spelare {index + 1}
@@ -204,5 +215,6 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
         <p>Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15. Den som först bryter får +10.</p>
         <p>{game.settings.allowNegativeScores ? "Minuspoäng tillåts." : "Totalpoäng stannar vid 0."}</p></div></aside>
     </main>}
+    </>}
   </div>;
 }
