@@ -61,7 +61,13 @@ Run `npm test`, `npm run build`, and `npm run server:check`. The explicit `npm r
 
 ### Digital round history
 
-The UI remains Swedish throughout; there is currently no language switch or English localization. Account controls show **Gäst** with local history, or the username with **Inloggad** and account save status. Both history views offer account controls and separate **Fysiska matcher** / **Digitala givar** navigation. Pending saves and temporary connection failures keep local results visible and offer the existing retry action. These are presentation changes only; auth and persistence behavior are unchanged.
+Account controls distinguish guest history on this device from history saved to an account. Both history views offer account controls and separate physical-match / digital-deal navigation. Pending saves and temporary connection failures keep local results visible and offer the existing retry action. These are presentation changes only; auth and persistence behavior are unchanged.
+
+### Language
+
+Swedish is the default. The small **Språk / Language** selector above the app switches every view between Swedish and English. The choice is saved locally under `chicappd-language`, independently of accounts; document language/title, dates, card descriptions, advice and history summaries follow the selection.
+
+`src/translations.ts` is the typed copy catalog. Swedish source phrases serve as stable keys, with natural English translations and optional improved Swedish wording. Use `useI18n().t(key, values)` for UI copy and indexed `{0}` placeholders for dynamic values. `src/locale.ts` translates known canonical game/Worker messages at the display boundary, including older saved summaries, without rewriting history or translating player names. New generated message formats should be added there with focused tests. Brand names, player/user names, room codes and printed card symbols remain unchanged. Language names are shown in their own languages. No translation dependency, schema or persistence changes are needed. `tests/locale.test.mjs` and `tests/localized-ui.test.mjs` cover choice persistence, messages, advice and representative real views in both languages.
 
 The landing page's **Digital spelhistorik** opens a read-only archive of completed local and online rounds. Each result saves public scores, settings, hand awards and played tricks; private hands, deck order and Worker seat tokens are excluded. Active games and their controls keep their existing behavior. This is a result archive, not a way to resume unfinished local games; rounds played before this feature were only in memory and cannot be recovered.
 

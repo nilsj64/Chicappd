@@ -1,3 +1,4 @@
+import { useI18n } from "./LanguageProvider";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { evaluateHand, handCategoryName } from "./poker";
@@ -46,7 +47,8 @@ type RoomEntry =
   | { kind: "join"; code: string };
 
 function FinalTrickRule({ points }: { points: 2 | 5 }) {
-  return <span>Sista sticket: {points} p</span>;
+  const { t } = useI18n();
+  return <span>{t("Sista sticket:")}{" "}{points} {" "}{t("p")}</span>;
 }
 
 function PlayingCard({
@@ -70,6 +72,7 @@ function PlayingCard({
   onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
+  const { t, message } = useI18n();
   const red = card.suit === "hearts" || card.suit === "diamonds";
   return (
     <button
@@ -81,7 +84,7 @@ function PlayingCard({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
-      aria-label={`${rankName[card.rank] ?? card.rank} i ${suitName[card.suit]}${selected ? ", valt" : ""}`}
+      aria-label={t("{0} i {1}{2}", [message(rankName[card.rank] ?? card.rank), message(suitName[card.suit]), selected ? t(", valt") : ""])}
       aria-pressed={selected}
       disabled={!onClick || unavailable}
     >
@@ -102,11 +105,12 @@ const cardBackAsset = (appearance: "light" | "dark") =>
   `${import.meta.env.BASE_URL}Chicappd-brand-assets/Chicappd-card-backs/card-back-${appearance}.svg`;
 
 function CardBack({ small = false, cardId }: { small?: boolean; cardId?: string }) {
+  const { t } = useI18n();
   return (
     <div
       className={`card-back ${small ? "card-small" : ""}`}
       data-card-id={cardId}
-      aria-label="Kort med baksidan uppåt"
+      aria-label={t("Kort med baksidan uppåt")}
       style={{ backgroundImage: `url(${cardBackAsset("dark")})` }}
     />
   );
@@ -133,57 +137,54 @@ function Avatar({
 }
 
 function Landing({ onEnter, onPhysical, onHistory }: { onEnter: (mode: EntryMode) => void; onPhysical: () => void; onHistory: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="landing-page">
       <header className="landing-header page-width">
         <Brand />
         <span className="header-note">
-          Kortkväll tillsammans, var ni än är <span><BrandMark /></span>
+          {t("Kortkväll tillsammans, var ni än är")}{" "}<span><BrandMark /></span>
         </span>
         <AccountControl />
       </header>
       <main className="landing-main page-width">
         <div className="hero-copy">
           <div className="eyebrow">
-            <span className="eyebrow-line" /> ETT SPEL FÖR DITT GÄNG
-          </div>
+            <span className="eyebrow-line" /> {" "}{t("ETT SPEL FÖR DITT GÄNG")}</div>
           <h1>
-            Samla vännerna
-            <br />
-            runt <em>bordet.</em>
+            {t("Samla vännerna")}<br />
+            {t("runt")}{" "}<em>{t("bordet.")}</em>
           </h1>
           <p>
-            Samla vännerna kring ett digitalt kortbord. Skapa ett rum och
-            börja spela tillsammans.
-          </p>
+            {t("Samla vännerna kring ett digitalt kortbord. Skapa ett rum och börja spela tillsammans.")}</p>
           <div className="hero-actions">
             <button
               className="button button-primary"
               onClick={() => onEnter("create")}
             >
-              Skapa spel <Icon name="arrow-up-right" />
+              {t("Skapa spel")}{" "}<Icon name="arrow-up-right" />
             </button>
             {API_URL && <button
               className="button button-secondary"
               onClick={() => onEnter("join")}
             >
-              Gå med i spel <Icon name="arrow-right" />
+              {t("Gå med i spel")}{" "}<Icon name="arrow-right" />
             </button>}
           </div>
           <div className="hero-footnote">
             <span className="footnote-icon"><BrandMark /></span> {API_URL
-              ? "Onlinerum för upp till fyra spelare" : "Spela lokalt med upp till tre CPU-spelare"}
+              ? t("Onlinerum för upp till fyra spelare") : t("Spela lokalt med upp till tre CPU-spelare")}
           </div>
-          <nav className="landing-history" aria-label="Poäng och historik">
-            <span className="form-kicker">POÄNG OCH HISTORIK</span>
-            <button onClick={onPhysical}><span>Fysiska kort<small>Poängräknare och sparade matcher</small></span><Icon name="arrow-right" /></button>
-            <button onClick={onHistory}><span>Digital spelhistorik<small>Resultat från avslutade givar</small></span><Icon name="arrow-right" /></button>
+          <nav className="landing-history" aria-label={t("Poäng och historik")}>
+            <span className="form-kicker">{t("POÄNG OCH HISTORIK")}</span>
+            <button onClick={onPhysical}><span>{t("Fysiska kort")}<small>{t("Poängräknare och sparade matcher")}</small></span><Icon name="arrow-right" /></button>
+            <button onClick={onHistory}><span>{t("Digital spelhistorik")}<small>{t("Resultat från avslutade givar")}</small></span><Icon name="arrow-right" /></button>
           </nav>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="art-ring art-ring-one" />
           <div className="art-ring art-ring-two" />
-          <div className="art-label art-label-top">FEM KORT. ETT BORD.</div>
+          <div className="art-label art-label-top">{t("FEM KORT. ETT BORD.")}</div>
           <div className="art-card art-card-back" style={{ backgroundImage: `url(${cardBackAsset("light")})` }} />
           <div className="art-card art-card-heart">
             <span className="art-corner">
@@ -198,14 +199,14 @@ function Landing({ onEnter, onPhysical, onHistory }: { onEnter: (mode: EntryMode
             <span className="art-suit"><SuitIcon suit="spades" /></span>
           </div>
           <div className="art-label art-label-bottom">
-            KORTKVÄLLEN BÖRJAR HÄR <span><Icon name="arrow-up-right" /></span>
+            {t("KORTKVÄLLEN BÖRJAR HÄR")}{" "}<span><Icon name="arrow-up-right" /></span>
           </div>
         </div>
       </main>
       <footer className="landing-footer page-width">
         <span className="suit-row"><SuitIcon suit="spades" /><SuitIcon suit="hearts" />
           <SuitIcon suit="diamonds" /><SuitIcon suit="clubs" /></span>
-        <span>För spelkvällar tillsammans.</span>
+        <span>{t("För spelkvällar tillsammans.")}</span>
       </footer>
     </div>
   );
@@ -222,6 +223,7 @@ function Entry({
   error: string | null;
   busy: boolean;
 }) {
+  const { t, errorMessage } = useI18n();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const joining = mode === "join";
@@ -230,33 +232,29 @@ function Entry({
       <header className="page-width inner-header">
         <Brand />
         <button className="text-button" onClick={onBack}>
-          <Icon name="arrow-left" /> Tillbaka
-        </button>
+          <Icon name="arrow-left" /> {" "}{t("Tillbaka")}</button>
       </header>
       <main className="entry-layout page-width">
         <div className="entry-intro">
           <div className="eyebrow">
-            <span className="eyebrow-line" /> DAGS ATT SPELA
-          </div>
+            <span className="eyebrow-line" /> {" "}{t("DAGS ATT SPELA")}</div>
           <h1>
             {joining ? (
               <>
-                Hitta din plats
-                <br />
-                <em>vid bordet.</em>
+                {t("Hitta din plats")}<br />
+                <em>{t("vid bordet.")}</em>
               </>
             ) : (
               <>
-                Bjud in till
-                <br />
-                <em>kortkväll.</em>
+                {t("Bjud in till")}<br />
+                <em>{t("kortkväll.")}</em>
               </>
             )}
           </h1>
           <p>
             {joining
-              ? "Skriv in koden du fick av den som skapade rummet."
-              : "Skapa ett rum och bjud in vänner eller lägg till datorstyrda spelare."}
+              ? t("Skriv in koden du fick av den som skapade rummet.")
+              : t("Skapa ett rum och bjud in vänner eller lägg till datorstyrda spelare.")}
           </p>
           <div className="entry-deco suit-row"><SuitIcon suit="clubs" /><SuitIcon suit="diamonds" />
             <SuitIcon suit="spades" /><SuitIcon suit="hearts" /></div>
@@ -277,27 +275,27 @@ function Entry({
         >
           <div className="form-icon"><BrandMark /></div>
           <div className="form-kicker">
-            {joining ? "GÅ MED I RUM" : "SKAPA RUM"}
+            {joining ? t("GÅ MED I RUM") : t("SKAPA RUM")}
           </div>
-          <h2>{joining ? "Gå med i ett rum" : "Skapa ett rum"}</h2>
-          <label htmlFor="player-name">Vad heter du?</label>
+          <h2>{joining ? t("Gå med i ett rum") : t("Skapa ett rum")}</h2>
+          <label htmlFor="player-name">{t("Vad heter du?")}</label>
           <input
             id="player-name"
             maxLength={20}
-            placeholder="Ditt namn"
+            placeholder={t("Ditt namn")}
             value={name}
             onChange={(event) => setName(event.target.value)}
             autoFocus
           />
           {joining && (
             <>
-              <label htmlFor="room-code">Rumskod</label>
+              <label htmlFor="room-code">{t("Rumskod")}</label>
               <input
                 id="room-code"
                 className="code-input"
                 maxLength={5}
                 minLength={5}
-                placeholder="T.ex. Q7K2P"
+                placeholder={t("T.ex. Q7K2P")}
                 value={code}
                 onChange={(event) =>
                   setCode(
@@ -312,10 +310,10 @@ function Entry({
             className="button button-primary form-submit"
             type="submit" disabled={busy}
           >
-            {joining ? "Gå med i rummet" : "Skapa rummet"} <Icon name="arrow-up-right" />
+            {joining ? t("Gå med i rummet") : t("Skapa rummet")} <Icon name="arrow-up-right" />
           </button>
-          {error && <p className="form-note" role="alert">{error}</p>}
-          <p className="form-note">{API_URL ? "Spela tillsammans online" : "Spela lokalt med datorstyrda spelare"}</p>
+          {error && <p className="form-note" role="alert">{errorMessage(error)}</p>}
+          <p className="form-note">{API_URL ? t("Spela tillsammans online") : t("Spela lokalt med datorstyrda spelare")}</p>
         </form>
       </main>
     </div>
@@ -325,6 +323,7 @@ function Entry({
 function Seat({ player, index, viewerId, onRemoveBot }: {
   player?: PlayerView; index: number; viewerId: string; onRemoveBot?: (id: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className={`lobby-seat ${player ? "seat-filled" : ""}`}>
       <span className="seat-index">0{index + 1}</span>
@@ -333,16 +332,16 @@ function Seat({ player, index, viewerId, onRemoveBot }: {
           <Avatar player={player} viewerId={viewerId} />
           <div className="seat-name">{player.name}</div>
           <div className="seat-detail">
-            {player.id === viewerId ? "Du" : player.control === "bot" ? "Datorspelare" : "Spelare"}
+            {player.id === viewerId ? t("Du") : player.control === "bot" ? t("Datorspelare") : t("Spelare")}
           </div>
           {player.control === "bot" && onRemoveBot && <button type="button" className="seat-remove"
-            onClick={() => onRemoveBot(player.id)} aria-label={`Ta bort ${player.name}`}>Ta bort</button>}
+            onClick={() => onRemoveBot(player.id)} aria-label={t("Ta bort {0}", [player.name])}>{t("Ta bort")}</button>}
         </>
       ) : (
         <>
           <span className="empty-avatar"><Icon name="plus" /></span>
-          <div className="seat-name">Ledig plats</div>
-          <div className="seat-detail">Ingen sitter här än</div>
+          <div className="seat-name">{t("Ledig plats")}</div>
+          <div className="seat-detail">{t("Ingen sitter här än")}</div>
         </>
       )}
     </div>
@@ -367,6 +366,7 @@ function Lobby({
   onStart: () => void;
   onLeave: () => void;
 }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const matchWinner = matchWinnerId(game.players, game.settings);
   async function copyCode() {
@@ -383,25 +383,24 @@ function Lobby({
       <header className="page-width inner-header">
         <Brand />
         <button className="text-button" onClick={onLeave}>
-          Lämna rum <Icon name="arrow-up-right" />
+          {t("Lämna rum")}{" "}<Icon name="arrow-up-right" />
         </button>
       </header>
       <main className="lobby-main page-width">
         <div className="lobby-heading">
           <div className="eyebrow">
-            <span className="eyebrow-line" /> SPELRUM
-          </div>
+            <span className="eyebrow-line" /> {" "}{t("SPELRUM")}</div>
           <h1>
-            Välkommen till <em>bordet.</em>
+            {t("Välkommen till")}{" "}<em>{t("bordet.")}</em>
           </h1>
-          <p>{online ? "Dela rumskoden med vänner eller lägg till datorstyrda spelare. Ägaren startar när minst två spelare är här." : "Lägg till datorstyrda spelare och starta när ni är minst två."}</p>
+          <p>{online ? t("Dela rumskoden med vänner eller lägg till datorstyrda spelare. Ägaren startar när minst två spelare är här.") : t("Lägg till datorstyrda spelare och starta när ni är minst två.")}</p>
         </div>
         <div className="lobby-content">
           {matchWinner && <MatchPodium players={game.players} winnerId={matchWinner} />}
           <section className="lobby-panel">
             <div className="panel-topline">
-              <span>SPELARE</span>
-              <span>{game.players.length} AV 4 PLATSER</span>
+              <span>{t("SPELARE")}</span>
+              <span>{game.players.length} {" "}{t("AV 4 PLATSER")}</span>
             </div>
             <div className="seats-grid">
               {Array.from({ length: 4 }, (_, index) => (
@@ -411,56 +410,51 @@ function Lobby({
             </div>
             <div className="lobby-panel-bottom">
               <span>
-                <span className="status-dot" /> {online ? "Onlinerum" : "Lokalt rum"}
+                <span className="status-dot" /> {online ? t("Onlinerum") : t("Lokalt rum")}
               </span>
               <button
                 className="small-button"
                 onClick={onAddBot}
                 disabled={game.players.length >= 4 || game.ownerId !== viewerId}
               >
-                <Icon name="plus" /> Lägg till datorspelare
-              </button>
+                <Icon name="plus" /> {" "}{t("Lägg till datorspelare")}</button>
             </div>
           </section>
           <aside className="room-panel">
             <div className="room-panel-icon"><BrandMark /></div>
-            <span className="form-kicker">DITT RUM</span>
+            <span className="form-kicker">{t("DITT RUM")}</span>
             <h2>
-              {online ? "Dela koden" : "Ditt spel"}
+              {online ? t("Dela koden") : t("Ditt spel")}
               <br />
-              {online ? "med vännerna." : "börjar här."}
+              {online ? t("med vännerna.") : t("börjar här.")}
             </h2>
-            {online ? <><div className="room-code-label">RUMSKOD</div>
-              <button className="room-code" onClick={copyCode} title="Kopiera rumskod">
+            {online ? <><div className="room-code-label">{t("RUMSKOD")}</div>
+              <button className="room-code" onClick={copyCode} title={t("Kopiera rumskod")}>
                 <span>{game.roomCode}</span>
                 <span className="copy-icon"><Icon name={copied ? "check" : "copy"} /></span>
               </button>
-              <p>{copied ? "Koden är kopierad!" : "Tryck på koden för att kopiera den."}</p></>
-              : <p>Lägg till datorstyrda spelare och välj regler innan ni börjar.</p>}
+              <p>{copied ? t("Koden är kopierad!") : t("Tryck på koden för att kopiera den.")}</p></>
+              : <p>{t("Lägg till datorstyrda spelare och välj regler innan ni börjar.")}</p>}
             <div className="room-rule">
-              <span className="room-code-label">POÄNGREGEL</span>
-              <label>Sista sticket
-                <select value={game.settings.finalTrickPoints} disabled={game.ownerId !== viewerId}
+              <span className="room-code-label">{t("POÄNGREGEL")}</span>
+              <label>{t("Sista sticket")}<select value={game.settings.finalTrickPoints} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, finalTrickPoints: Number(event.target.value) as 2 | 5 })}>
-                  <option value={5}>5 poäng</option><option value={2}>2 poäng</option>
+                  <option value={5}>{t("5 poäng")}</option><option value={2}>{t("2 poäng")}</option>
                 </select>
               </label>
-              <label>Minuspoäng
-                <select value={game.settings.allowNegativeScores ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+              <label>{t("Minuspoäng")}<select value={game.settings.allowNegativeScores ? "yes" : "no"} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, allowNegativeScores: event.target.value === "yes" })}>
-                  <option value="no">Tillåt inte minuspoäng</option><option value="yes">Tillåt minuspoäng</option>
+                  <option value="no">{t("Tillåt inte minuspoäng")}</option><option value="yes">{t("Tillåt minuspoäng")}</option>
                 </select>
               </label>
-              <label>Kräv över 52 poäng för vinst
-                <select value={game.settings.requireOver52ToWin ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+              <label>{t("Kräv över 52 poäng för vinst")}<select value={game.settings.requireOver52ToWin ? "yes" : "no"} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, requireOver52ToWin: event.target.value === "yes" })}>
-                  <option value="no">Av · minst 52 poäng</option><option value="yes">På · minst 53 poäng</option>
+                  <option value="no">{t("Av · minst 52 poäng")}</option><option value="yes">{t("På · minst 53 poäng")}</option>
                 </select>
               </label>
-              <label>Nollställ vid över 52 poäng utan Chicago
-                <select value={game.settings.resetOver52WithoutChicago ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+              <label>{t("Nollställ vid över 52 poäng utan Chicago")}<select value={game.settings.resetOver52WithoutChicago ? "yes" : "no"} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, resetOver52WithoutChicago: event.target.value === "yes" })}>
-                  <option value="no">Av · behåll poängen</option><option value="yes">På · nollställ till 0</option>
+                  <option value="no">{t("Av · behåll poängen")}</option><option value="yes">{t("På · nollställ till 0")}</option>
                 </select>
               </label>
             </div>
@@ -469,13 +463,13 @@ function Lobby({
               onClick={onStart}
               disabled={game.players.length < 2 || game.ownerId !== viewerId || !!matchWinner}
             >
-              Börja spela <Icon name="arrow-right" />
+              {t("Börja spela")}{" "}<Icon name="arrow-right" />
             </button>
             <small>
-              {matchWinner ? "Matchen är avgjord. Skapa ett nytt rum för en ny match."
+              {matchWinner ? t("Matchen är avgjord. Skapa ett nytt rum för en ny match.")
                 : game.players.length < 2
-                ? "Bjud in en vän eller lägg till en datorstyrd spelare."
-                : "Starta matchen med fem kort var."}
+                ? t("Bjud in en vän eller lägg till en datorstyrd spelare.")
+                : t("Starta matchen med fem kort var.")}
             </small>
           </aside>
         </div>
@@ -505,6 +499,7 @@ function Opponent({
   flight: CardFlight | null;
   onCardLanded: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className={`opponent seat-${position} ${active ? "opponent-active" : ""}`} data-player-id={player.id}>
       <div className="opponent-cards">
@@ -515,8 +510,8 @@ function Opponent({
       <div className="opponent-label">
         <Avatar player={player} viewerId={viewerId} size="small" />
         <span>
-          <strong className="table-player-name">{player.name} <span className="table-player-score">{player.score} p</span></strong>
-          {active && <small>Spelar nu</small>}
+          <strong className="table-player-name">{player.name} <span className="table-player-score">{player.score} {" "}{t("p")}</span></strong>
+          {active && <small>{t("Spelar nu")}</small>}
         </span>
       </div>
       {showPlayedCards && <PlayedStack cards={playedCards} player={player}
@@ -534,7 +529,8 @@ function pileOffset(index: number) {
 }
 
 function DiscardPile({ count }: { count: number }) {
-  return <div className="discard-pile" aria-label={`Hög med ${count} bortbytta kort`}>
+  const { t } = useI18n();
+  return <div className="discard-pile" aria-label={t("Hög med {0} bortbytta kort", [count])}>
     <div className="physical-pile discard-pile-cards">
       {Array.from({ length: count }, (_, index) => {
         const offset = pileOffset(index);
@@ -548,7 +544,8 @@ function DiscardPile({ count }: { count: number }) {
 }
 
 function DeckPile({ count }: { count: number }) {
-  return <div className="physical-pile deck-pile" aria-label={`Kortlek med ${count} kort kvar`}>
+  const { t } = useI18n();
+  return <div className="physical-pile deck-pile" aria-label={t("Kortlek med {0} kort kvar", [count])}>
     {Array.from({ length: count }, (_, index) => {
       const offset = pileOffset(index);
       return <div className="physical-pile-card" key={index}
@@ -562,6 +559,7 @@ function DeckPile({ count }: { count: number }) {
 function ExchangeFlight({ event, playerName, own }: {
   event: ExchangeEvent; playerName: string; own: boolean;
 }) {
+  const { t } = useI18n();
   const [cards, setCards] = useState<CSSProperties[]>([]);
   useLayoutEffect(() => {
     const source = document.querySelector(own ? ".your-hand .playing-card" :
@@ -585,8 +583,8 @@ function ExchangeFlight({ event, playerName, own }: {
       <CardBack small />
     </div>)}
     <div className="exchange-playback-label">{playerName} {event.singleCardChoice
-      ? event.singleCardChoice === "accepted" ? "tog det presenterade kortet" : "avstod från kortet och fick ett nytt"
-      : event.changedCards ? `byter ${event.changedCards} kort` : "behåller handen"}</div>
+      ? event.singleCardChoice === "accepted" ? t("tog det presenterade kortet") : t("avstod från kortet och fick ett nytt")
+      : event.changedCards ? t("byter {0} kort", [event.changedCards]) : t("behåller handen")}</div>
   </div>;
 }
 
@@ -606,8 +604,9 @@ function PlayedStack({ cards, player, currentCardIds, flight, onCardLanded }: {
   flight: CardFlight | null;
   onCardLanded: () => void;
 }) {
+  const { t } = useI18n();
   return <div className="played-stack" data-played-player-id={player.id}
-    aria-label={`${player.name}: ${cards.length} spelade kort`}>
+    aria-label={t("{0}: {1} spelade kort", [player.name, cards.length])}>
     {cards.map((card, index) => <TrickCard key={card.id} played={{ playerId: player.id, card }}
       index={index} current={currentCardIds.has(card.id)} flight={flight} onLanded={onCardLanded} />)}
   </div>;
@@ -660,10 +659,11 @@ function cardLanding(cardId: string) {
 }
 
 function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; viewerId: string; settings: GameSettings }) {
+  const { t } = useI18n();
   return (
     <aside className="score-panel">
       <div className="score-header">
-        <span>POÄNGSTÄLLNING</span>
+        <span>{t("POÄNGSTÄLLNING")}</span>
         <span><BrandMark /></span>
       </div>
       <div className="score-list">
@@ -673,11 +673,11 @@ function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; vi
             <Avatar player={player} viewerId={viewerId} size="small" />
             <span className="score-name">
               {player.name}
-              {player.id === viewerId && <small>DU</small>}
+              {player.id === viewerId && <small>{t("DU")}</small>}
             </span>
             <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`}
-              role="img" aria-label={player.hasDeclaredChicago ? `${player.name} har sagt Chicago` : `${player.name} har inte sagt Chicago`}
-              title={player.hasDeclaredChicago ? "Har sagt Chicago" : "Har inte sagt Chicago"}>
+              role="img" aria-label={player.hasDeclaredChicago ? t("{0} har sagt Chicago", [player.name]) : t("{0} har inte sagt Chicago", [player.name])}
+              title={player.hasDeclaredChicago ? t("Har sagt Chicago") : t("Har inte sagt Chicago")}>
               {player.hasDeclaredChicago ? "✓" : ""}
             </span>
             <strong>{player.score}</strong>
@@ -685,14 +685,14 @@ function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; vi
         ))}
       </div>
       <div className="score-foot">
-        ✓ = har sagt Chicago · {settings.requireOver52ToWin ? "Över 52 poäng krävs för vinst (minst 53)." : "Minst 52 poäng krävs för vinst."} Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.
-        {settings.resetOver52WithoutChicago && " Över 52 utan Chicago nollställer poängen."}
+        {t("✓ = har sagt Chicago ·")}{" "}{settings.requireOver52ToWin ? t("Över 52 poäng krävs för vinst (minst 53).") : t("Minst 52 poäng krävs för vinst.")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
       </div>
     </aside>
   );
 }
 
 function ActivityLog({ activity, quiet }: { activity: string[]; quiet: boolean }) {
+  const { t, message } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
   const previous = useRef({ count: 0, height: 0 });
   useLayoutEffect(() => {
@@ -703,10 +703,10 @@ function ActivityLog({ activity, quiet }: { activity: string[]; quiet: boolean }
     previous.current = { count: activity.length, height: list.scrollHeight };
   }, [activity]);
   return <div className={`table-activity ${quiet ? "table-activity-quiet" : ""}`} aria-live="polite">
-    <span>SENASTE HÄNDELSER</span>
-    {activity.length === 0 ? <p>Välj kort att byta eller behåll handen.</p> :
+    <span>{t("SENASTE HÄNDELSER")}</span>
+    {activity.length === 0 ? <p>{t("Välj kort att byta eller behåll handen.")}</p> :
       <ul ref={listRef}>
-        {activity.map((event, index) => <li key={`${index}-${event}`}>{event}</li>).reverse()}
+        {activity.map((event, index) => <li key={`${index}-${event}`}>{message(event)}</li>).reverse()}
       </ul>}
   </div>;
 }
@@ -751,11 +751,12 @@ function Table({
   onLobby: () => void;
   onLeave: () => void;
 }) {
+  const { t, message, errorMessage, language } = useI18n();
   const local = game.players.find((player) => player.id === viewerId)!;
   const exchangeAllowed = canExchangeCards(local.score);
   const matchWinner = game.tableStage === "result" ? matchWinnerId(game.players, game.settings) : null;
   const [supportOpen, setSupportOpen] = useState(false);
-  const advice = supportOpen ? supportAdvice(game, viewerId) : null;
+  const advice = supportOpen ? supportAdvice(game, viewerId, language) : null;
   const opponents = game.players.filter((player) => player.id !== viewerId);
   const exchanging = game.tableStage === "exchange";
   const yourExchangeTurn = exchanging && game.activePlayerId === local.id;
@@ -841,8 +842,8 @@ function Table({
     onClick={selectionCount ? onExchange : onKeep}
     disabled={exchangeBusy || !!exchangePlayback || !yourExchangeTurn || !!pendingExchange}
   >
-    {selectionCount ? `Byt ${selectionCount} kort`
-      : "Behåll handen"}
+    {selectionCount ? t("Byt {0} kort", [selectionCount])
+      : t("Behåll handen")}
     <Icon name="arrow-right" />
   </button>;
   const legalTrickIds = new Set(playingTricks
@@ -853,14 +854,14 @@ function Table({
       <header className="table-header">
         <Brand light />
         <div className="table-header-center">
-          <span className="table-room">RUM {game.roomCode}</span>
+          <span className="table-room">{t("RUM")}{" "}{game.roomCode}</span>
           <span className="table-header-divider" />
           <span>
-            <span className="live-dot" /> {online ? "Onlinespel" : "Lokalt spel"}
+            <span className="live-dot" /> {online ? t("Onlinespel") : t("Lokalt spel")}
           </span>
         </div>
         <button className="table-exit" onClick={onLeave}>
-          Lämna spelet <Icon name="arrow-up-right" />
+          {t("Lämna spelet")}{" "}<Icon name="arrow-up-right" />
         </button>
       </header>
       <main className="table-layout">
@@ -870,14 +871,14 @@ function Table({
             <MonkeyDealer key={game.roundStarterId} exchange={exchangePlayback}
               initialDeal={exchanging || (playingTricks && !game.currentTrick.length && !game.completedTricks.length)}
               presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
-            {exchanging && <div className="exchange-round">Kortbyte {game.exchangeCount + 1} av 3</div>}
+            {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{game.exchangeCount + 1} {" "}{t("av 3")}</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
-              Kortbyte {game.exchangeFeedback.exchangeCount} klart · {game.exchangeFeedback.changedCards === 0
-                ? "du behöll handen"
-                : `du bytte ${game.exchangeFeedback.changedCards} kort`}
+              {t("Kortbyte")}{" "}{game.exchangeFeedback.exchangeCount} {" "}{t("klart ·")}{" "}{game.exchangeFeedback.changedCards === 0
+                ? t("du behöll handen")
+                : t("du bytte {0} kort", [game.exchangeFeedback.changedCards])}
             </div>}
             {exchangePlayback && <ExchangeFlight key={exchangePlayback.id} event={exchangePlayback}
-              playerName={game.players.find((player) => player.id === exchangePlayback.playerId)?.name ?? "Spelare"}
+              playerName={game.players.find((player) => player.id === exchangePlayback.playerId)?.name ?? t("Spelare")}
               own={exchangePlayback.playerId === viewerId} />}
             <div className="opponents">
               {opponents.map((player, index) => (
@@ -907,66 +908,65 @@ function Table({
                 </div>
               </div>
               {pendingExchange && <div className="exchange-offer" aria-live="polite">
-                <strong>{game.players.find((player) => player.id === pendingExchange.playerId)?.name} byter ett kort</strong>
-                <span>Första nya kortet</span>
+                <strong>{game.players.find((player) => player.id === pendingExchange.playerId)?.name} {" "}{t("byter ett kort")}</strong>
+                <span>{t("Första nya kortet")}</span>
                 <PlayingCard card={pendingExchange.card} />
                 {yourChoice ? <div className="exchange-offer-actions">
-                  <span>Ta det visade kortet eller avstå och få nästa kort dolt.</span>
-                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(true)}>Ta det visade kortet</button>
-                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(false)}>Avstå · få ett nytt kort</button>
-                </div> : <span>Väntar på svar…</span>}
+                  <span>{t("Ta det visade kortet eller avstå och få nästa kort dolt.")}</span>
+                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(true)}>{t("Ta det visade kortet")}</button>
+                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(false)}>{t("Avstå · få ett nytt kort")}</button>
+                </div> : <span>{t("Väntar på svar…")}</span>}
               </div>}
               </> : <div className="trick-view" aria-live="polite">
                 {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
-                  Chicago: <strong>{chicagoPlayer.name}</strong> satsar på alla stick
-                  {!game.currentTrick.length && !game.completedTricks.length && <small>Ordinarie första utspelaren har företräde, därefter gäller spelordningen. Chicago-spelaren börjar; valet låses vid första kortet.</small>}
-                  {chicagoBreaker && <small>{chicagoBreaker.name} bröt Chicago och får {chicagoBreakPoints} poäng</small>}
+                  {t("Chicago:")}{" "}<strong>{chicagoPlayer.name}</strong> {" "}{t("satsar på alla stick")}{!game.currentTrick.length && !game.completedTricks.length && <small>{t("Ordinarie första utspelaren har företräde, därefter gäller spelordningen. Chicago-spelaren börjar; valet låses vid första kortet.")}</small>}
+                  {chicagoBreaker && <small>{chicagoBreaker.name} {" "}{t("bröt Chicago och får")}{" "}{chicagoBreakPoints} {" "}{t("poäng")}</small>}
                 </div>}
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
-                  <div className="trick-cue">{leadPlayer.name} spelar ut</div>}
+                  <div className="trick-cue">{leadPlayer.name} {" "}{t("spelar ut")}</div>}
                 {playingTricks && !reviewingTrick && firstTrickCard && !firstCardFlying &&
-                  <div className="trick-cue trick-suit-cue">Följ färgen om du kan: <strong>{suitName[firstTrickCard.card.suit]}</strong></div>}
+                  <div className="trick-cue trick-suit-cue">{t("Följ färgen om du kan:")}{" "}<strong>{message(suitName[firstTrickCard.card.suit])}</strong></div>}
                 {(game.tableStage === "result" || reviewingTrick) && <h2>{playingTricks
                   ? reviewingTrick
-                    ? flight ? "Kortet spelas…" : `${nextLeader?.name} vann stick ${game.completedTricks.length}`
+                    ? flight ? t("Kortet spelas…") : t("{0} vann stick {1}", [nextLeader?.name, game.completedTricks.length])
                     : ""
-                  : pendingTrick ? `${finalTrickWinner?.name} vann sista sticket` : "Rundan är slut"}</h2>}
+                  : pendingTrick ? t("{0} vann sista sticket", [finalTrickWinner?.name]) : t("Rundan är slut")}</h2>}
                 {showResult && <div className="round-summary">
                   {matchWinner && <MatchPodium players={game.players} winnerId={matchWinner} />}
                   <div className="round-awards">
-                    <div><span>Sista sticket · separat regel</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} p</b></strong></div>
-                    <div><span>Bästa handen</span><strong>{finalAward?.winnerId
-                      ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalWinnerCategory ? handCategoryName[finalWinnerCategory] : ""}` : "Ingen"}
-                      <b>+{finalAward?.points ?? 0} p</b></strong></div>
+                    <div><span>{t("Sista sticket · separat regel")}</span><strong>{finalTrickWinner?.name} <b>+{game.finalTrickAward?.points ?? 0} {" "}{t("p")}</b></strong></div>
+                    <div><span>{t("Bästa handen")}</span><strong>{finalAward?.winnerId
+                      ? `${game.players.find((player) => player.id === finalAward.winnerId)?.name} · ${finalWinnerCategory ? message(handCategoryName[finalWinnerCategory]) : ""}` : t("Ingen")}
+                      <b>+{finalAward?.points ?? 0} {" "}{t("p")}</b></strong></div>
                     {game.chicagoAward && <div><span>Chicago</span><strong>{chicagoPlayer?.name}
-                      <b>{game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} p</b></strong></div>}
+                      <b>{game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} {" "}{t("p")}</b></strong></div>}
                   </div>
-                  <div className="round-hands"><h3>Händer vid rundans slut</h3><ul>{game.players.map((player) => <li key={player.id}>
+                  <div className="round-hands"><h3>{t("Händer vid rundans slut")}</h3><ul>{game.players.map((player) => <li key={player.id}>
                     <span>{player.name}</span><span>{finalAward?.evaluations[player.id]
-                      ? handCategoryName[finalAward.evaluations[player.id].category] : ""}</span>
+                      ? message(handCategoryName[finalAward.evaluations[player.id].category]) : ""}</span>
                   </li>)}</ul></div>
                   {!matchWinner && <button className="button button-next-round" onClick={onNextRound}>
-                    Spela en runda till <Icon name="arrow-right" />
+                    {t("Spela en runda till")}{" "}<Icon name="arrow-right" />
                   </button>}
                 </div>}
               </div>}
             </div>
             <div className="your-area">
-              {exchanging && <div className="hand-combination" aria-live="polite">{currentEvaluation?.label}</div>}
+              {exchanging && <div className="hand-combination" aria-live="polite">{currentEvaluation ? message(currentEvaluation.label) : ""}</div>}
               <div className="your-label">
                 <Avatar player={local} viewerId={viewerId} size="small" />
                 <span>
                   <strong>
-                    {local.name} <em>DU</em> <span className="table-player-score">{local.score} p</span>
+                    {local.name} <em>{t("DU")}</em> <span className="table-player-score">{local.score} {" "}{t("p")}</span>
                   </strong>
                   {game.tableStage !== "result" && <small>
-                    {exchanging ? yourChoice ? "Välj Ja eller Nej för det öppna kortet"
-                      : yourExchangeTurn && !pendingExchange ? exchangeAllowed ? "Välj kort att byta eller behåll handen" : "Från 46 poäng får du inte byta kort"
-                      : `${nextLeader?.name ?? "Nästa spelare"} byter först…`
-                      : reviewingTrick ? "Nästa stick börjar snart"
-                      : playingTricks && !humanTurn ? `${nextLeader?.name ?? "Nästa spelare"} spelar…`
-                      : "Tryck på ett kort eller dra det till bordet"}
+                    {exchanging ? yourChoice ? t("Välj Ja eller Nej för det öppna kortet")
+                      : yourExchangeTurn && !pendingExchange ? exchangeAllowed ? t("Välj kort att byta eller behåll handen") : t("Från 46 poäng får du inte byta kort")
+                      : t("{0} byter först…", [nextLeader?.name ?? t("Nästa spelare")])
+                      : reviewingTrick ? t("Nästa stick börjar snart")
+                      : playingTricks && !humanTurn ? t("{0} spelar…", [nextLeader?.name ?? t("Nästa spelare")])
+                      : t("Tryck på ett kort eller dra det till bordet")}
                   </small>}
                 </span>
               </div>
@@ -1014,36 +1014,35 @@ function Table({
               {playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
                 <button type="button" className="button chicago-button" onClick={onDeclareChicago}
                   disabled={!canDeclareChicago || actionBusy || !!flight}>
-                  Säg Chicago · alla fem stick (+15 / −15)
-                </button>}
+                  {t("Säg Chicago · alla fem stick (+15 / −15)")}</button>}
               {playingTricks && !game.chicagoPlayerId && local.score < 15 && !game.completedTricks.length &&
-                <div className="chicago-hint">Chicago kräver minst 15 poäng.</div>}
-              {game.trickError && <div className="selection-count selection-error" role="status">{game.trickError}</div>}
+                <div className="chicago-hint">{t("Chicago kräver minst 15 poäng.")}</div>}
+              {game.trickError && <div className="selection-count selection-error" role="status">{errorMessage(game.trickError)}</div>}
             </div>
           </div>
         </section>
         <aside className="table-sidebar">
           <div className="sidebar-top">
-            <span className="sidebar-eyebrow">SPELBORD</span>
+            <span className="sidebar-eyebrow">{t("SPELBORD")}</span>
             <h1>
               Chicappd<span>.</span>
             </h1>
-            <p>Fem kort på hand. Vem vinner rundan?</p>
+            <p>{t("Fem kort på hand. Vem vinner rundan?")}</p>
           </div>
           <button type="button" className="support-toggle" aria-expanded={supportOpen}
             aria-controls="support-sheet" onClick={() => setSupportOpen((open) => !open)}>
-            <span>Tips och regler</span><span>{supportOpen ? "Dölj" : "Visa"} <Icon name={supportOpen ? "minus" : "plus"} /></span>
+            <span>{t("Tips och regler")}</span><span>{supportOpen ? t("Dölj") : t("Visa")} <Icon name={supportOpen ? "minus" : "plus"} /></span>
           </button>
-          {supportOpen && advice && <section id="support-sheet" className="support-sheet" aria-label="Tips och regler" aria-live="polite">
+          {supportOpen && advice && <section id="support-sheet" className="support-sheet" aria-label={t("Tips och regler")} aria-live="polite">
             <p>{advice.context}</p>
             {advice.tips.map((tip, index) => <div className="support-tip" key={index}>
-              <span>{game.tableStage === "exchange" ? (index === 0 ? "BEHÅLL GÄRNA" : "ÖVERVÄG ATT BYTA") : (index === 0 ? "FÖRSLAG" : "ALTERNATIV")}</span>
+              <span>{game.tableStage === "exchange" ? (index === 0 ? t("BEHÅLL GÄRNA") : t("ÖVERVÄG ATT BYTA")) : (index === 0 ? t("FÖRSLAG") : t("ALTERNATIV"))}</span>
               <p>{tip.text}</p>
             </div>)}
           </section>}
           <ScorePanel players={game.players} viewerId={viewerId} settings={game.settings} />
           {game.tableStage !== "exchange" && <div className="trick-tally">
-            <span>VUNNA STICK</span>
+            <span>{t("VUNNA STICK")}</span>
             {game.players.map((player) => <div key={player.id}>
               <span>{player.name}</span>
               <strong>{game.completedTricks.filter((trick) => trick.winnerId === player.id).length}</strong>
@@ -1055,13 +1054,13 @@ function Table({
           {(!exchanging || game.activity.length > 0) &&
             <ActivityLog activity={game.activity} quiet={exchanging} />}
           <div className="table-controls">
-            <span>{online ? "ONLINESPEL" : "LOKALT SPEL"}</span>
+            <span>{online ? t("ONLINESPEL") : t("LOKALT SPEL")}</span>
             <button onClick={onLobby} disabled={online && game.ownerId !== viewerId}>
-              <Icon name="arrow-left" /> <span>Till väntrummet</span>
+              <Icon name="arrow-left" /> <span>{t("Till väntrummet")}</span>
             </button>
           </div>
           <div className="sidebar-bottom">
-            Spela tillsammans. <span><Icon name="heart" /></span>
+            {t("Spela tillsammans.")}{" "}<span><Icon name="heart" /></span>
           </div>
         </aside>
       </main>
@@ -1070,6 +1069,7 @@ function Table({
 }
 
 export default function App() {
+  const { t, errorMessage } = useI18n();
   const { digitalStore } = useAccountHistory();
   const [digitalHistoryOpen, setDigitalHistoryOpen] = useState(false);
   const [physicalOpen, setPhysicalOpen] = useState(false);
@@ -1282,9 +1282,9 @@ export default function App() {
     onPhysical={() => { setDigitalHistoryOpen(false); setPhysicalOpen(true); }}
     onPlay={() => { setDigitalHistoryOpen(false); setMode("create"); }} />;
   if (onlineSession && !view) return <div className="entry-page"><div className="page-width entry-layout"><div>
-    <Brand /><h1>Återansluter till rummet…</h1>
-    {error && <p role="alert">{error}</p>}
-    <button className="button button-secondary" onClick={clearRoom}>Till startsidan</button>
+    <Brand /><h1>{t("Återansluter till rummet…")}</h1>
+    {error && <p role="alert">{errorMessage(error)}</p>}
+    <button className="button button-secondary" onClick={clearRoom}>{t("Till startsidan")}</button>
   </div></div></div>;
   if (!view || !viewerId)
     return mode ? (
@@ -1309,8 +1309,8 @@ export default function App() {
         if (online) void send({ type: "start-round" });
         else setGame((current) => current && applyCommand(current, { type: "start-round", actorId: viewerId }));
       }}
-      onLeave={() => void leave()} />{error && <div className="network-message" role="alert">{error}</div>}
-      {online && !connected && <div className="network-message" role="status">Återansluter till spelservern…</div>}</>;
+      onLeave={() => void leave()} />{error && <div className="network-message" role="alert">{errorMessage(error)}</div>}
+      {online && !connected && <div className="network-message" role="status">{t("Återansluter till spelservern…")}</div>}</>;
   return <><Table
     game={view}
     viewerId={viewerId}
@@ -1347,6 +1347,6 @@ export default function App() {
       else setGame((current) => current && applyCommand(current, { type: "return-lobby", actorId: viewerId }));
     }}
     onLeave={() => void leave()}
-  />{error && <div className="network-message" role="alert">{error}</div>}
-    {online && !connected && <div className="network-message" role="status">Återansluter till spelservern…</div>}</>;
+  />{error && <div className="network-message" role="alert">{errorMessage(error)}</div>}
+    {online && !connected && <div className="network-message" role="status">{t("Återansluter till spelservern…")}</div>}</>;
 }
