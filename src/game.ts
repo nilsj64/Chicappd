@@ -3,7 +3,7 @@ import type { HandEvaluation } from "./poker.ts";
 import { chooseBotDiscards, chooseBotTrickCard } from "./bot.ts";
 import { legalCards, trickWinner } from "./tricks.ts";
 import type { PlayedCard } from "./tricks.ts";
-import { canDeclareChicago, canExchangeCards, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, matchWinnerId, scoreAfter } from "./scoring.ts";
+import { canDeclareChicago, canExchangeCards, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, matchWinnerId, normalizeSettings, scoreAfter, scoreAfterAward, validSettings } from "./scoring.ts";
 
 export const suits = ["spades", "hearts", "diamonds", "clubs"] as const;
 export const ranks = [
@@ -44,7 +44,12 @@ export type HandAward = {
   points: number;
 };
 export type TrickAward = { winnerId: string; points: number };
-export type GameSettings = { finalTrickPoints: 2 | 5; allowNegativeScores: boolean };
+export type GameSettings = {
+  finalTrickPoints: 2 | 5;
+  allowNegativeScores: boolean;
+  requireOver52ToWin: boolean;
+  resetOver52WithoutChicago: boolean;
+};
 export type ChicagoAward = { playerId: string; points: 15 | -15 };
 export type ExchangeFeedback = { exchangeCount: 1 | 2 | 3; changedCards: number };
 export type ExchangeEvent = { id: number; exchangeCount: 1 | 2 | 3; playerId: string; changedCards: number; singleCardChoice?: "accepted" | "rejected" };
@@ -128,7 +133,7 @@ export { finalTrickPoints } from "./scoring.ts";
 
 function addPoints(game: GameState, players: Player[], playerId: string, points: number): Player[] {
   return players.map((player) => player.id === playerId ? {
-    ...player, score: scoreAfter(player.score, points, game.settings ?? defaultSettings),
+    ...player, score: scoreAfterAward(player, points, game.settings ?? defaultSettings),
   } : player);
 }
 
@@ -203,7 +208,7 @@ export function addDemoPlayer(game: GameState): GameState {
 }
 
 export function startRound(game: GameState): GameState {
-  if (game.players.length < 2 || matchWinnerId(game.players) ||
+  if (game.players.length < 2 || matchWinnerId(game.players, game.settings) ||
     (game.phase !== "lobby" && game.tableStage !== "result")) return game;
   const deck = shuffled(createDeck());
   const players = game.players.map((player) => ({
@@ -660,9 +665,8 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
   switch (command.type) {
     case "set-settings":
       if (command.actorId !== game.ownerId || game.phase !== "lobby" ||
-        !command.settings || ![2, 5].includes(command.settings.finalTrickPoints) ||
-        typeof command.settings.allowNegativeScores !== "boolean") return game;
-      return { ...game, settings: { ...command.settings },
+        !validSettings(command.settings)) return game;
+      return { ...game, settings: normalizeSettings(command.settings),
         players: command.settings.allowNegativeScores ? game.players : game.players.map((player) => ({
           ...player, score: scoreAfter(player.score, 0, command.settings),
         })) };
@@ -752,7 +756,7 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
     } : null,
     handAwards: game.handAwards.map((award) => ({ ...award, evaluations: revealed ? award.evaluations : {} })),
     finalTrickAward: game.finalTrickAward, activity: [...game.activity],
-    settings: game.settings ?? { finalTrickPoints: 5, allowNegativeScores: false },
+    settings: normalizeSettings(game.settings),
     chicagoPlayerId: game.chicagoPlayerId ?? null,
     chicagoBreakerId: game.chicagoBreakerId ?? null,
     chicagoAward: game.chicagoAward ?? null,

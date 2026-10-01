@@ -358,7 +358,7 @@ function Lobby({
   onLeave: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const matchWinner = matchWinnerId(game.players);
+  const matchWinner = matchWinnerId(game.players, game.settings);
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(game.roomCode);
@@ -439,6 +439,18 @@ function Lobby({
                 <select value={game.settings.allowNegativeScores ? "yes" : "no"} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, allowNegativeScores: event.target.value === "yes" })}>
                   <option value="no">Tillåt inte minuspoäng</option><option value="yes">Tillåt minuspoäng</option>
+                </select>
+              </label>
+              <label>Kräv över 52 poäng för vinst
+                <select value={game.settings.requireOver52ToWin ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+                  onChange={(event) => onSettings({ ...game.settings, requireOver52ToWin: event.target.value === "yes" })}>
+                  <option value="no">Av · minst 52 poäng</option><option value="yes">På · minst 53 poäng</option>
+                </select>
+              </label>
+              <label>Nollställ vid över 52 poäng utan Chicago
+                <select value={game.settings.resetOver52WithoutChicago ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+                  onChange={(event) => onSettings({ ...game.settings, resetOver52WithoutChicago: event.target.value === "yes" })}>
+                  <option value="no">Av · behåll poängen</option><option value="yes">På · nollställ till 0</option>
                 </select>
               </label>
             </div>
@@ -637,7 +649,7 @@ function cardLanding(cardId: string) {
   };
 }
 
-function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: string }) {
+function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; viewerId: string; settings: GameSettings }) {
   return (
     <aside className="score-panel">
       <div className="score-header">
@@ -663,7 +675,8 @@ function ScorePanel({ players, viewerId }: { players: PlayerView[]; viewerId: st
         ))}
       </div>
       <div className="score-foot">
-        ✓ = har sagt Chicago · Över 52 poäng krävs för vinst (minst 53). Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.
+        ✓ = har sagt Chicago · {settings.requireOver52ToWin ? "Över 52 poäng krävs för vinst (minst 53)." : "Minst 52 poäng krävs för vinst."} Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.
+        {settings.resetOver52WithoutChicago && " Över 52 utan Chicago nollställer poängen."}
       </div>
     </aside>
   );
@@ -730,7 +743,7 @@ function Table({
 }) {
   const local = game.players.find((player) => player.id === viewerId)!;
   const exchangeAllowed = canExchangeCards(local.score);
-  const matchWinner = game.tableStage === "result" ? matchWinnerId(game.players) : null;
+  const matchWinner = game.tableStage === "result" ? matchWinnerId(game.players, game.settings) : null;
   const [supportOpen, setSupportOpen] = useState(false);
   const advice = supportOpen ? supportAdvice(game, viewerId) : null;
   const opponents = game.players.filter((player) => player.id !== viewerId);
@@ -1015,7 +1028,7 @@ function Table({
               <p>{tip.text}</p>
             </div>)}
           </section>}
-          <ScorePanel players={game.players} viewerId={viewerId} />
+          <ScorePanel players={game.players} viewerId={viewerId} settings={game.settings} />
           {game.tableStage !== "exchange" && <div className="trick-tally">
             <span>VUNNA STICK</span>
             {game.players.map((player) => <div key={player.id}>

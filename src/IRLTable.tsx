@@ -35,6 +35,16 @@ function RuleSettings({ settings, onChange }: { settings: GameSettings; onChange
         <option value="no">Tillåt inte minuspoäng</option><option value="yes">Tillåt minuspoäng</option>
       </select>
     </label>
+    <label>Kräv över 52 poäng för vinst
+      <select value={settings.requireOver52ToWin ? "yes" : "no"} onChange={(event) => onChange({ ...settings, requireOver52ToWin: event.target.value === "yes" })}>
+        <option value="no">Av · minst 52 poäng</option><option value="yes">På · minst 53 poäng</option>
+      </select>
+    </label>
+    <label>Nollställ vid över 52 poäng utan Chicago
+      <select value={settings.resetOver52WithoutChicago ? "yes" : "no"} onChange={(event) => onChange({ ...settings, resetOver52WithoutChicago: event.target.value === "yes" })}>
+        <option value="no">Av · behåll poängen</option><option value="yes">På · nollställ till 0</option>
+      </select>
+    </label>
   </div>;
 }
 
@@ -100,7 +110,7 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
     setChicagoWon(null); setBreakerId(""); setResultError("");
   }
 
-  const matchWinner = game?.phase === "result" ? matchWinnerId(game.players) : null;
+  const matchWinner = game?.phase === "result" ? matchWinnerId(game.players, game.settings) : null;
   return <div className="irl-page">
     <header className="irl-header">
       <Brand light />
@@ -189,7 +199,8 @@ export default function IRLTable({ onExit }: { onExit: () => void }) {
         }}>{newMatchReady ? "Bekräfta ny match (nollställ)" : "Starta ny match"}</button>
         {newMatchReady && <button type="button" onClick={() => setNewMatchReady(false)}>Avbryt</button>}
       </div><div className="irl-rules"><strong>REGLER</strong><p>Bästa handen ger 1–8 poäng efter byte 1, byte 2 och vid givens slut. Sista sticket ger {finalTrickPoints(game.settings)} poäng.</p>
-        <p>Över 52 poäng (minst 53) vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.</p>
+        <p>{game.settings.requireOver52ToWin ? "Över 52 poäng (minst 53)" : "Minst 52 poäng"} vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.</p>
+        {game.settings.resetOver52WithoutChicago && <p>Över 52 poäng utan att ha sagt Chicago nollställer totalpoängen till 0 efter poängutdelning.</p>}
         <p>Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15. Den som först bryter får +10.</p>
         <p>{game.settings.allowNegativeScores ? "Minuspoäng tillåts." : "Totalpoäng stannar vid 0."}</p></div></aside>
     </main>}

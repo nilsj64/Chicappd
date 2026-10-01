@@ -1,7 +1,7 @@
 import type { GameSettings } from "./game.ts";
 import { handCategoryName, handCategoryPoints } from "./poker.ts";
 import type { HandCategory } from "./poker.ts";
-import { canDeclareChicago, chicagoBreakPoints, chicagoResult, finalTrickPoints, matchWinnerId, scoreAfter } from "./scoring.ts";
+import { canDeclareChicago, chicagoBreakPoints, chicagoResult, finalTrickPoints, matchWinnerId, normalizeSettings, scoreAfterAward, validSettings } from "./scoring.ts";
 
 export type IRLPlayer = { id: string; name: string; score: number; hasDeclaredChicago: boolean };
 export type HandResult = { playerId: string; category: HandCategory } | null;
@@ -36,7 +36,7 @@ function hasPlayer(game: IRLGame, id: string): boolean {
 
 function award(game: IRLGame, players: IRLPlayer[], id: string, points: number): IRLPlayer[] {
   return players.map((player) => player.id === id
-    ? { ...player, score: scoreAfter(player.score, points, game.settings) } : player);
+    ? { ...player, score: scoreAfterAward(player, points, game.settings) } : player);
 }
 
 function validHand(game: IRLGame, hand: HandResult): boolean {
@@ -47,9 +47,9 @@ export function createIRLGame(names: string[], settings: GameSettings): IRLGame 
   const trimmed = names.map((name) => name.trim());
   if (trimmed.length < 2 || trimmed.length > 4 || trimmed.some((name) => !name || name.length > 20) ||
     new Set(trimmed.map((name) => name.toLocaleLowerCase())).size !== trimmed.length ||
-    ![2, 5].includes(settings.finalTrickPoints) || typeof settings.allowNegativeScores !== "boolean") return null;
+    !validSettings(settings)) return null;
   return { players: trimmed.map((name, index) => ({ id: `irl-${index + 1}`, name, score: 0, hasDeclaredChicago: false })),
-    settings: { ...settings }, dealNumber: 1, phase: "hands", chicagoPlayerId: null,
+    settings: normalizeSettings(settings), dealNumber: 1, phase: "hands", chicagoPlayerId: null,
     lastSummary: [], history: [] };
 }
 
@@ -102,7 +102,7 @@ export function finishIRLDeal(game: IRLGame, result: DealResult): IRLGame {
 }
 
 export function nextIRLDeal(game: IRLGame): IRLGame {
-  return game.phase === "result" && !matchWinnerId(game.players) ? commit(game, { ...snapshot(game), dealNumber: game.dealNumber + 1,
+  return game.phase === "result" && !matchWinnerId(game.players, game.settings) ? commit(game, { ...snapshot(game), dealNumber: game.dealNumber + 1,
     phase: "hands", chicagoPlayerId: null, lastSummary: [] }) : game;
 }
 

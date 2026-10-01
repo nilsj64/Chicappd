@@ -1,4 +1,5 @@
 import type { GameView } from "./game";
+import { normalizeSettings, validSettings } from "./scoring";
 
 export const API_URL = (import.meta.env.VITE_MULTIPLAYER_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 export type OnlineSession = { code: string; token: string; playerId: string };
@@ -7,10 +8,9 @@ const storageKey = "chicappd-online-session";
 
 function roomView(view: GameView | undefined): GameView {
   if (!view) throw new Error("Spelservern gav ett ofullständigt svar.");
-  if (!view.settings || ![2, 5].includes(view.settings.finalTrickPoints) ||
-    typeof view.settings.allowNegativeScores !== "boolean")
+  if (!validSettings(view.settings))
     throw new Error("Spelservern behöver uppdateras innan nya rum kan användas. Försök igen senare.");
-  return view;
+  return { ...view, settings: normalizeSettings(view.settings) };
 }
 
 export function savedSession(): OnlineSession | null {
@@ -81,7 +81,7 @@ export function watchOnline(session: OnlineSession, onView: (view: GameView) => 
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data) as { type: string; view?: GameView };
-        if (message.type === "view" && message.view?.settings) onView(message.view);
+        if (message.type === "view" && message.view?.settings) onView(roomView(message.view));
       } catch { /* Ignore malformed network frames. */ }
     };
     socket.onclose = () => {

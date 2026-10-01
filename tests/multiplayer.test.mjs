@@ -362,10 +362,10 @@ test("winning requires more than 52 and a past Chicago; equal leaders keep playi
   const room = humanRoom();
   for (const score of [52, 53]) {
     for (const hasDeclaredChicago of [false, true]) {
-      const game = { ...room, players: room.players.map((player) => player.id === "human-a"
+      const game = { ...room, settings: { ...room.settings, requireOver52ToWin: true }, players: room.players.map((player) => player.id === "human-a"
         ? { ...player, score, hasDeclaredChicago } : player) };
       const wins = score > 52 && hasDeclaredChicago;
-      assert.equal(matchWinnerId(game.players), wins ? "human-a" : null);
+      assert.equal(matchWinnerId(game.players, game.settings), wins ? "human-a" : null);
       const next = applyCommand(game, { type: "start-round", actorId: "human-a" });
       assert.equal(next === game, wins);
     }

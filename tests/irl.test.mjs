@@ -60,7 +60,7 @@ test("first Chicago breaker gets 10 and negative setting controls floor", () => 
 });
 
 test("physical match requires Chicago and more than 52 points to end", () => {
-  let game = createIRLGame(players, settings);
+  let game = createIRLGame(players, { ...settings, requireOver52ToWin: true });
   game = correctIRLScore(game, "irl-1", 52);
   game = recordFirstHands(game, [null, null]);
   game = finishIRLDeal(game, { finalHand: null, finalTrickWinnerId: "irl-2" });

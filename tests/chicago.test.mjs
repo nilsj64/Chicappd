@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { defaultSettings } from "../src/scoring.ts";
 import { applyCommand, createDeck, createRoom, startRound, viewForPlayer, canPlayerDeclareChicago } from "../src/game.ts";
 
 function setup(winningChicago = false) {
@@ -53,7 +54,7 @@ test("only the room owner can set scoring rules and disabling negatives clamps e
   const settings = { finalTrickPoints: 2, allowNegativeScores: false };
   assert.strictEqual(applyCommand(game, { type: "set-settings", actorId: "bea", settings }), game);
   game = applyCommand(game, { type: "set-settings", actorId: "ada", settings });
-  assert.deepEqual(game.settings, settings);
+  assert.deepEqual(game.settings, { ...defaultSettings, ...settings });
   assert.equal(game.players[1].score, 0);
 });
 
