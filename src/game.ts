@@ -94,6 +94,7 @@ export type GameState = {
 
 export const CPU_NAMES = ["Terra", "Luna", "Astra"] as const;
 export const CPU_REVEAL_MS = 5000;
+export const CPU_EXCHANGE_PAUSE_MS = 1300;
 export function roomCapacity(game: { players: readonly { control: "human" | "bot" }[] }): number {
   return game.players.some(player => player.control === "bot") ? 4 : 6;
 }
@@ -494,7 +495,16 @@ function submitAcceptedSingle(game: GameState, playerId: string, discardId: stri
   return finishExchange(game, exchanged, playerId, 1, accept ? "accepted" : "rejected");
 }
 
-function runExchangeBots(game: GameState): GameState {
+/** With no human decision left to wait for, publish each eligible CPU turn
+ * separately instead of draining all three exchange passes in one update. */
+export function needsTimedBotExchange(game: Pick<GameState, "phase" | "tableStage" | "pendingExchange" | "activePlayerId" | "players">): boolean {
+  const active = game.players.find(player => player.id === game.activePlayerId);
+  return game.phase === "table" && game.tableStage === "exchange" && !game.pendingExchange &&
+    active?.control === "bot" && canExchangeCards(active.score) &&
+    !game.players.some(player => player.control === "human" && canExchangeCards(player.score));
+}
+
+function runExchangeBots(game: GameState, allowTimedBotAction = false): GameState {
   let next = game;
   // At most three exchanges for each of six seats.
   for (let turn = 0; turn < 24 && next.tableStage === "exchange"; turn++) {
@@ -503,6 +513,10 @@ function runExchangeBots(game: GameState): GameState {
     const player = next.players.find((candidate) => candidate.id === next.activePlayerId);
     // A locked seat never waits for input, even when other players may exchange.
     if (!player || (player.control !== "bot" && canExchangeCards(player.score))) break;
+    if (needsTimedBotExchange(next)) {
+      if (!allowTimedBotAction) break;
+      allowTimedBotAction = false;
+    }
     const advanced = submitExchange(next, player.id, canExchangeCards(player.score) ? chooseBotDiscards(player.hand) : []);
     if (advanced === next) break;
     next = advanced;
@@ -777,6 +791,7 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
       if (game.pendingExchange && game.players.find((p) => p.id === game.pendingExchange?.playerId)?.control === "bot")
         return Date.now() < (game.pendingExchange.revealUntil ?? 0) ? game
           : runExchangeBots(answerExchange(game, game.pendingExchange.playerId, true));
+      if (needsTimedBotExchange(game)) return runExchangeBots(game, true);
       return playNextDemoTrickCard(game);
     case "continue-trick":
       return command.actorId === game.ownerId ? continueAfterTrickOnce(game) : game;

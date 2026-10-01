@@ -7,6 +7,8 @@ import {
   applyCommand,
   roomCapacity,
   CPU_REVEAL_MS,
+  CPU_EXCHANGE_PAUSE_MS,
+  needsTimedBotExchange,
   digitalMatchWinnerId,
   canPlayerDeclareChicago,
   createRoom,
@@ -981,6 +983,7 @@ function Table({
                   {game.tableStage !== "result" && <small>
                     {exchanging ? yourChoice ? t("Välj Ja eller Nej för det öppna kortet")
                       : yourExchangeTurn && !pendingExchange ? exchangeAllowed ? t("Välj kort att byta eller behåll handen") : t("Från 46 poäng får du inte byta kort")
+                      : !exchangeAllowed ? t("Du får inte byta kort. Väntar på {0}…", [nextLeader?.name ?? t("Nästa spelare")])
                       : t("{0} byter först…", [nextLeader?.name ?? t("Nästa spelare")])
                       : reviewingTrick ? t("Nästa stick börjar snart")
                       : playingTricks && !humanTurn ? t("{0} spelar…", [nextLeader?.name ?? t("Nästa spelare")])
@@ -1205,12 +1208,17 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (online || !game?.pendingExchange ||
-      game.players.find((player) => player.id === game.pendingExchange?.playerId)?.control !== "bot") return;
-    const timer = window.setTimeout(() => setGame((current) => current
-      ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), Math.max(1, (game.pendingExchange.revealUntil ?? Date.now() + CPU_REVEAL_MS) - Date.now() + 20));
+    if (online || !game || game.phase !== "table" || game.tableStage !== "exchange") return;
+    const botOffer = game.pendingExchange &&
+      game.players.find(player => player.id === game.pendingExchange?.playerId)?.control === "bot";
+    if (!botOffer && !needsTimedBotExchange(game)) return;
+    const delay = botOffer
+      ? Math.max(1, (game.pendingExchange!.revealUntil ?? Date.now() + CPU_REVEAL_MS) - Date.now() + 20)
+      : CPU_EXCHANGE_PAUSE_MS;
+    const timer = window.setTimeout(() => setGame(current => current
+      ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), delay);
     return () => window.clearTimeout(timer);
-  }, [game?.pendingExchange, online]);
+  }, [game?.phase, game?.tableStage, game?.pendingExchange, game?.activePlayerId, game?.exchangeEventSerial, online]);
 
   useEffect(() => {
     if (online || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;

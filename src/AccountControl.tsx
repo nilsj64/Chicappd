@@ -89,7 +89,7 @@ export default function AccountControl({ showHistoryStatus = true }: { showHisto
         <button className="button button-primary" disabled={busy}>{busy ? mode === "signup" ? t("Skapar konto…") : t("Loggar in…") : mode === "signup" ? t("Skapa konto") : t("Logga in")}</button>
         <button type="button" className="text-button" disabled={busy} onClick={() => {
           setMode(mode === "signin" ? "signup" : "signin"); setError(""); setPassword("");
-        }}>{mode === "signin" ? t("Nytt här? Skapa konto") : t("Har du redan konto? Logga in")}</button>
+        }}>{mode === "signin" ? t("Ny här? Skapa konto") : t("Har du redan konto? Logga in")}</button>
       </form>}
       <div className="account-guest-option"><p>{t("Konto är valfritt. Du kan alltid spela som gäst.")}</p><button className="text-button" onClick={() => dialog.current?.close()}>{t("Fortsätt som gäst")}</button></div>
     </dialog>

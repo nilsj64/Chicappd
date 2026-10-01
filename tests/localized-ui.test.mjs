@@ -14,6 +14,7 @@ import { defaultSettings } from "../src/scoring.ts";
 import { digitalResult, digitalResultId, digitalHistoryOptions } from "../src/digitalHistory.ts";
 import { HistoryStore } from "../src/history.ts";
 import { finishedDigitalRound } from "./digital-fixture.mjs";
+import { lockedHumanRoom } from "./exchange-fixture.mjs";
 
 // Render the actual components with no environment file, accounts or network calls.
 const cacheDir=fs.mkdtempSync(path.join(os.tmpdir(),"chicappd-locale-ui-"));
@@ -35,6 +36,22 @@ function render(language,component,storage=disk()) {
   storage.setItem(languageStorageKey,language);globalThis.localStorage=storage;
   return renderToStaticMarkup(React.createElement(LanguageProvider,null,React.createElement(LanguageSwitch),React.createElement(HistoryProvider,null,component)));
 }
+
+test("locked human sees the localized exchange waiting view and public CPU offer", t => {
+  let game = applyCommand(lockedHumanRoom(t), { type: "start-round", actorId: "ada" });
+  const props = { viewerId: "ada", online: false, selectedCardIds: [], exchangeBusy: false, actionBusy: false,
+    visibleDiscard: 0, flight: null, reviewedTrickCount: 0,
+    ...Object.fromEntries(["onToggle", "onExchange", "onKeep", "onExchangeChoice", "onPlayTrickCard", "onDeclareChicago", "onCardLanded", "onNextRound", "onLobby", "onLeave"].map(key => [key, noop])) };
+  for (const offered of [false, true]) {
+    if (offered) game = applyCommand(game, { type: "advance-bot", actorId: "ada" });
+    const sv = render("sv", React.createElement(Table, { ...props, game: viewForPlayer(game, "ada") }));
+    const en = render("en", React.createElement(Table, { ...props, game: viewForPlayer(game, "ada") }));
+    assert.match(sv, /Du får inte byta kort\. Väntar på Terra…/);
+    assert.match(en, /You cannot exchange cards\. Waiting for Terra…/);
+    assert.doesNotMatch(en, /Choose cards to exchange|Take the face-up card/);
+    if (offered) assert.match(en, /spades-2/);
+  }
+});
 
 test("actual landing and optional account UI render in either language",()=>{
   const sv=render("sv",React.createElement(App)),en=render("en",React.createElement(App));

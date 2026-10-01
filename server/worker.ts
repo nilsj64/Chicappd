@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { applyCommand, createRoom, randomRoomCode, viewForPlayer, roomCapacity } from "../src/game.ts";
+import { applyCommand, createRoom, randomRoomCode, viewForPlayer, roomCapacity, needsTimedBotExchange, CPU_EXCHANGE_PAUSE_MS } from "../src/game.ts";
 import type { GameCommand, GameSettings, GameState } from "../src/game.ts";
 
 type Env = { ROOMS: DurableObjectNamespace<GameRoom>; FRONTEND_ORIGIN: string };
@@ -136,10 +136,10 @@ export class GameRoom extends DurableObject<Env> {
       if (applied === saved.game) return json({ error: "Draget är inte tillåtet just nu.", view: this.view(saved, session.playerId) }, 409);
       const next = this.advanceBots(applied);
       saved = { ...saved, game: next };
-      if (this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
+      if (needsTimedBotExchange(next) || this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
         next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
         await this.ctx.storage.setAlarm(next.pendingExchange?.revealUntil ??
-          Date.now() + (this.openingChicagoWindow(next) ? 5000 : 1300));
+          Date.now() + (this.openingChicagoWindow(next) ? 5000 : CPU_EXCHANGE_PAUSE_MS));
       await this.persist(saved);
       return json({ view: this.view(saved, session.playerId) });
     }
@@ -147,14 +147,14 @@ export class GameRoom extends DurableObject<Env> {
   }
   async alarm() {
     const saved = await this.saved();
-    if (!saved || (!saved.game.waitingForNextTrick && !saved.game.pendingExchange && !this.openingChicagoWindow(saved.game))) return;
+    if (!saved || (!saved.game.waitingForNextTrick && !saved.game.pendingExchange && !needsTimedBotExchange(saved.game) && !this.openingChicagoWindow(saved.game))) return;
     const next = this.advanceBots(applyCommand(saved.game, {
-      type: saved.game.pendingExchange || this.openingChicagoWindow(saved.game) ? "advance-bot" : "continue-trick", actorId: saved.game.ownerId,
+      type: saved.game.pendingExchange || needsTimedBotExchange(saved.game) || this.openingChicagoWindow(saved.game) ? "advance-bot" : "continue-trick", actorId: saved.game.ownerId,
     }), true);
-    if (this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
+    if (needsTimedBotExchange(next) || this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
       next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
       await this.ctx.storage.setAlarm(next.pendingExchange?.revealUntil ??
-          Date.now() + (this.openingChicagoWindow(next) ? 5000 : 1300));
+          Date.now() + (this.openingChicagoWindow(next) ? 5000 : CPU_EXCHANGE_PAUSE_MS));
     if (next !== saved.game) await this.persist({ ...saved, game: next });
   }
 }
