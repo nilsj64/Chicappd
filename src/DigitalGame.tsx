@@ -27,7 +27,10 @@ import { Icon, SuitIcon } from "./Icon";
 import { canExchangeCards, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
 import ChibiDealer from "./ChibiDealer";
-import { DEALER_RELEASE_MS, EXCHANGE_STAGGER_MS, exchangePlaybackMs } from "./dealerAnimation";
+import { DEALER_RELEASE_MS, EXCHANGE_STAGGER_MS, REPLACEMENT_FLIGHT_MS,
+  REPLACEMENT_FLIP_MS, exchangeTimeline } from "./dealerAnimation";
+import { exchangeHandSlots, replacementKey } from "./exchangePresentation";
+import type { CardRect, ExchangePlayback, Replacement } from "./exchangePresentation";
 import { useAccountHistory } from "./HistoryProvider";
 import { accountName } from "./account";
 import { digitalResult, digitalResultId } from "./digitalHistory";
@@ -499,32 +502,145 @@ function DeckPile({ count }: { count: number }) {
   </div>;
 }
 
-function ExchangeFlight({ event, playerName, own }: {
-  event: ExchangeEvent; playerName: string; own: boolean;
+function replacementTarget(own: boolean, playerId: string, slot: number) {
+  return own ? document.querySelector(`.your-hand [data-dealer-slot="${slot}"] .playing-card`)
+    : document.querySelector(`[data-player-id="${CSS.escape(playerId)}"] .opponent-cards .card-back:nth-child(${slot + 1})`);
+}
+
+function ReplacementFlight({ replacement, event, own, onLanded }: {
+  replacement: Replacement; event: ExchangeEvent; own: boolean;
+  onLanded: (key: string) => void;
+}) {
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState("waiting");
+  const landedRef = useRef(onLanded);
+  landedRef.current = onLanded;
+  const finishRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    const node = nodeRef.current;
+    const dealer = document.querySelector(".chibi-dealer");
+    const target = replacementTarget(own, event.playerId, replacement.slot);
+    let done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      setPhase("done");
+      landedRef.current(replacementKey(event.id, replacement.card?.id ?? String(replacement.slot)));
+      if (!own && target instanceof HTMLElement) target.style.visibility = "";
+    }
+    finishRef.current = finish;
+    if (!node || !dealer || !target) { finish(); return; }
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (motion.matches) { finish(); return; }
+    if (!own && target instanceof HTMLElement) target.style.visibility = "hidden";
+    let animation: Animation | undefined;
+    let arrived = false;
+    // Measure at the current viewport size, including while resizing/scrolling.
+    // Preserve animation progress when refreshing its responsive endpoints.
+    function position() {
+      if (done || !node || !dealer || !target) return;
+      const to = target.getBoundingClientRect();
+      const from = dealer.getBoundingClientRect();
+      Object.assign(node.style, { left: `${to.x}px`, top: `${to.y}px`, width: `${to.width}px`, height: `${to.height}px` });
+      if (arrived) return;
+      const progress = animation?.currentTime;
+      animation?.cancel();
+      const x = from.x + from.width * .28 - to.x - to.width / 2;
+      const y = from.y + from.height * .65 - to.y - to.height / 2;
+      const start = `translate(${x}px, ${y}px) scale(.35) rotate(-8deg)`;
+      animation = node.animate([
+        { transform: start, opacity: 0, offset: 0 },
+        { transform: start, opacity: 1, offset: .02 },
+        { transform: "translate(0, 0) scale(1) rotate(0deg)", opacity: 1 },
+      ], { duration: REPLACEMENT_FLIGHT_MS, easing: "cubic-bezier(.2,.7,.2,1)", fill: "both" });
+      if (typeof progress === "number") animation.currentTime = progress;
+      animation.onfinish = () => {
+        arrived = true;
+        if (own && replacement.card) setPhase("flipping");
+        else finish();
+      };
+    }
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(target);
+    observer.observe(dealer);
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    const reduce = () => { if (motion.matches) { animation?.cancel(); finish(); } };
+    motion.addEventListener("change", reduce);
+    return () => {
+      animation?.cancel();
+      observer.disconnect();
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      motion.removeEventListener("change", reduce);
+      if (!own && target instanceof HTMLElement) target.style.visibility = "";
+    };
+  }, [event.id, own, event.playerId, replacement]);
+  return <div ref={nodeRef} className={`replacement-flight-card ${phase === "flipping" ? "replacement-card-flipping" : ""}`}
+    data-replacement-card-id={replacement.card?.id} data-replacement-slot={replacement.slot}
+    style={{ visibility: phase === "done" ? "hidden" : undefined,
+      "--replacement-flip-ms": `${REPLACEMENT_FLIP_MS}ms` } as CSSProperties} aria-hidden="true">
+    <div className="replacement-card-inner" onAnimationEnd={() => finishRef.current()}>
+      <div className="replacement-card-face replacement-card-back"><CardBack small /></div>
+      {replacement.card && <div className="replacement-card-face replacement-card-front"><PlayingCard card={replacement.card} /></div>}
+    </div>
+  </div>;
+}
+
+function ExchangeFlight({ playback, playerName, own, releaseCue, onDeal, onLanded, onComplete }: {
+  playback: ExchangePlayback; playerName: string; own: boolean; releaseCue?: string;
+  onDeal: (cue: string) => void; onLanded: (key: string) => void; onComplete: () => void;
 }) {
   const { t } = useI18n();
+  const { event, sources, replacements, reducedMotion } = playback;
+  const timeline = exchangeTimeline(event.changedCards, replacements.length);
   const [cards, setCards] = useState<CSSProperties[]>([]);
+  const [replacementIndex, setReplacementIndex] = useState(0);
+  const [delivering, setDelivering] = useState<number | null>(null);
+  const completeRef = useRef(onComplete);
+  completeRef.current = onComplete;
+  function finishReplacement(key: string) {
+    onLanded(key);
+    setDelivering(null);
+    if (replacementIndex + 1 < replacements.length) setReplacementIndex(replacementIndex + 1);
+    else onComplete();
+  }
   useLayoutEffect(() => {
-    const source = document.querySelector(own ? ".your-hand .playing-card" :
-      `[data-player-id="${CSS.escape(event.playerId)}"] .opponent-cards .card-back`);
+    if (releaseCue === `exchange:${event.id}:${replacementIndex}`) setDelivering(replacementIndex);
+  }, [releaseCue, event.id, replacementIndex]);
+  useEffect(() => {
+    if (!replacementIndex) return;
+    const timer = window.setTimeout(() => onDeal(`exchange:${event.id}:${replacementIndex}`), EXCHANGE_STAGGER_MS);
+    return () => window.clearTimeout(timer);
+  }, [replacementIndex, event.id, onDeal]);
+  useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const reduce = () => { if (motion.matches) completeRef.current(); };
+    motion.addEventListener("change", reduce);
+    return () => motion.removeEventListener("change", reduce);
+  }, []);
+  useLayoutEffect(() => {
+    if (reducedMotion) return;
     const target = document.querySelector(".discard-pile");
-    if (!source || !target) return;
-    const from = source.getBoundingClientRect();
+    if (!target) return;
     const to = target.getBoundingClientRect();
-    setCards(Array.from({ length: event.changedCards }, (_, index) => ({
-      left: from.left + (index - (event.changedCards - 1) / 2) * 8,
-      top: from.top,
-      width: from.width,
-      height: from.height,
-      "--exchange-x": `${to.left + to.width / 2 - from.left - from.width / 2}px`,
-      "--exchange-y": `${to.top + to.height / 2 - from.top - from.height / 2}px`,
+    setCards(sources.map((from, index) => ({
+      left: from.x, top: from.y, width: from.width, height: from.height,
+      "--exchange-x": `${to.x + to.width / 2 - from.x - from.width / 2}px`,
+      "--exchange-y": `${to.y + to.height / 2 - from.y - from.height / 2}px`,
       animationDelay: `${DEALER_RELEASE_MS + index * EXCHANGE_STAGGER_MS}ms`,
     } as CSSProperties)));
-  }, [event.id, event.changedCards, event.playerId, own]);
-  return <div className="exchange-playback" aria-live="polite">
+    if (!replacements.length) return;
+    const timer = window.setTimeout(() => onDeal(`exchange:${event.id}:0`), timeline.replacements[0].deal);
+    return () => window.clearTimeout(timer);
+  }, [playback, onDeal]);
+  return <div className="exchange-playback" aria-live="polite" data-exchange-id={event.id}>
     {cards.map((style, index) => <div className="exchange-flight-card" style={style} key={index} aria-hidden="true">
       <CardBack small />
     </div>)}
+    {!reducedMotion && delivering !== null && <ReplacementFlight key={delivering}
+      replacement={replacements[delivering]} event={event} own={own} onLanded={finishReplacement} />}
     <div className="exchange-playback-label">{playerName} {event.singleCardChoice
       ? event.singleCardChoice === "accepted" ? t("tog det presenterade kortet") : t("avstod från kortet och fick ett nytt")
       : event.changedCards ? t("byter {0} kort", [event.changedCards]) : t("behåller handen")}</div>
@@ -672,7 +788,7 @@ function Table({
   onCardLanded,
   onNextRound,
   onLobby,
-  onLeave, online,
+  onLeave, online, onExchangePlaybackBusy,
 }: {
   game: GameView;
   viewerId: string;
@@ -693,6 +809,7 @@ function Table({
   onNextRound: () => void;
   onLobby: () => void;
   onLeave: () => void;
+  onExchangePlaybackBusy?: (busy: boolean) => void;
 }) {
   const { t, message, errorMessage, language } = useI18n();
   const local = game.players.find((player) => player.id === viewerId)!;
@@ -707,14 +824,78 @@ function Table({
   const yourChoice = pendingExchange?.playerId === viewerId;
   const playingTricks = game.tableStage === "tricks";
   const reviewingTrick = playingTricks && game.waitingForNextTrick;
-  const humanTurn = playingTricks && game.activePlayerId === local.id && !reviewingTrick && !flight;
+  // Presentation snapshots preserve actual cards and the positions they left.
+  // Fresh events are captured before painting the authoritative replacement hand.
+  const seenExchangeEvent = useRef(game.exchangeEvents.at(-1)?.id ?? 0);
+  const handSnapshot = useRef(local.hand);
+  const geometry = useRef(new Map<string, CardRect>());
+  const [presentedHand, setPresentedHand] = useState(local.hand);
+  const [exchangeQueue, setExchangeQueue] = useState<ExchangePlayback[]>([]);
+  const [landedReplacements, setLandedReplacements] = useState(new Set<string>());
+  const [dealCue, setDealCue] = useState<string>();
+  const [releaseCue, setReleaseCue] = useState<string>();
+  const [initialDeal] = useState(game.exchangeCount === 0 && !game.currentTrick.length &&
+    !game.completedTricks.length && game.tableStage !== "result");
+  const initialCardIds = useRef(new Set(local.hand.map(card => card.id)));
+  useLayoutEffect(() => {
+    const fresh = game.exchangeEvents.filter(event => event.id > seenExchangeEvent.current);
+    const slots = exchangeHandSlots(handSnapshot.current, local.hand);
+    const latestOwn = fresh.filter(event => event.playerId === viewerId).at(-1);
+    handSnapshot.current = slots.hand;
+    setPresentedHand(slots.hand);
+    if (!fresh.length) return;
+    seenExchangeEvent.current = fresh.at(-1)!.id;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const playback = fresh.map(event => {
+      const own = event.playerId === viewerId;
+      const sources = own && event === latestOwn
+        ? slots.discarded.map(card => geometry.current.get(card.id)).filter((rect): rect is CardRect => !!rect)
+        : own ? [] : Array.from({ length: event.changedCards }, (_, slot) =>
+          geometry.current.get(`${event.playerId}:${slot}`)).filter((rect): rect is CardRect => !!rect);
+      const replacements = own ? event === latestOwn ? slots.replacements : []
+        : Array.from({ length: Math.min(event.changedCards,
+          game.players.find(player => player.id === event.playerId)?.handCount ?? 0) }, (_, slot) => ({ slot }));
+      return { event, sources, replacements, reducedMotion };
+    });
+    setExchangeQueue(queue => [...queue, ...playback]);
+  }, [game.exchangeEvents, local.hand, viewerId]);
+  useLayoutEffect(() => {
+    const positions = new Map<string, CardRect>();
+    function remember(key: string, node: Element) {
+      const { x, y, width, height } = node.getBoundingClientRect();
+      positions.set(key, { x, y, width, height });
+    }
+    document.querySelectorAll<HTMLElement>(".your-hand [data-card-id]").forEach(node => remember(node.dataset.cardId!, node));
+    document.querySelectorAll<HTMLElement>(".opponent[data-player-id]").forEach(player => {
+      player.querySelectorAll(".opponent-cards .card-back").forEach((node, slot) => remember(`${player.dataset.playerId}:${slot}`, node));
+    });
+    geometry.current = positions;
+  });
+  const exchangePlayback = exchangeQueue[0];
+  useEffect(() => {
+    // Animated exchanges finish on the actual final landing/flip callback.
+    // Keeps and reduced-motion updates have no moving cards to wait for.
+    if (!exchangePlayback || (!exchangePlayback.reducedMotion && exchangePlayback.replacements.length)) return;
+    const timer = window.setTimeout(() => setExchangeQueue(queue => queue.slice(1)),
+      exchangePlayback.reducedMotion ? 1 : exchangeTimeline(exchangePlayback.event.changedCards, 0).duration);
+    return () => window.clearTimeout(timer);
+  }, [exchangePlayback]);
+  useLayoutEffect(() => {
+    onExchangePlaybackBusy?.(!!exchangeQueue.length);
+  }, [!!exchangeQueue.length, onExchangePlaybackBusy]);
+  useEffect(() => () => onExchangePlaybackBusy?.(false), [onExchangePlaybackBusy]);
+  const hiddenReplacementIds = new Set(exchangeQueue.flatMap(playback => playback.reducedMotion ? [] :
+    playback.replacements.filter(replacement => replacement.card &&
+      !landedReplacements.has(replacementKey(playback.event.id, replacement.card.id)))
+      .map(replacement => replacement.card!.id)));
+  const humanTurn = playingTricks && game.activePlayerId === local.id && !reviewingTrick && !flight && !exchangeQueue.length;
   const lastTrick = game.completedTricks.at(-1);
   const nextLeader = game.players.find((player) => player.id === game.activePlayerId);
   const firstTrickCard = game.currentTrick[0];
   const leadPlayer = game.players.find((player) => player.id === (firstTrickCard?.playerId ?? game.activePlayerId));
   const firstCardFlying = !!firstTrickCard && flight?.card.id === firstTrickCard.card.id;
   const pendingTrick = game.completedTricks.length > reviewedTrickCount;
-  const showResult = game.tableStage === "result" && !pendingTrick && !flight;
+  const showResult = game.tableStage === "result" && !pendingTrick && !flight && !exchangeQueue.length;
   const currentCardIds = new Set((game.currentTrick.length
     ? game.currentTrick : pendingTrick ? lastTrick?.cards ?? [] : []).map((played) => played.card.id));
   const selectionCount = exchangeAllowed ? selectedCardIds.length : 0;
@@ -727,25 +908,6 @@ function Table({
   const chicagoBreaker = game.players.find((player) => player.id === game.chicagoBreakerId);
   const canDeclareChicago = canPlayerDeclareChicago(game, viewerId);
   const [showExchangeFeedback, setShowExchangeFeedback] = useState(false);
-  // Mounting/rejoining a table must not replay historical exchanges.
-  const seenExchangeEvent = useRef(game.exchangeEvents.at(-1)?.id ?? 0);
-  const [exchangeQueue, setExchangeQueue] = useState<ExchangeEvent[]>([]);
-  const [initialDeal] = useState(game.exchangeCount === 0 && !game.currentTrick.length &&
-    !game.completedTricks.length && game.tableStage !== "result");
-  useEffect(() => {
-    const fresh = game.exchangeEvents.filter((event) => event.id > seenExchangeEvent.current);
-    if (!fresh.length) return;
-    seenExchangeEvent.current = fresh.at(-1)!.id;
-    setExchangeQueue((queue) => [...queue, ...fresh]);
-  }, [game.exchangeEvents]);
-  useEffect(() => {
-    if (!exchangeQueue.length) return;
-    const timer = window.setTimeout(() => setExchangeQueue((queue) => queue.slice(1)),
-      exchangePlaybackMs(exchangeQueue[0]));
-    return () => window.clearTimeout(timer);
-  }, [exchangeQueue]);
-  const exchangePlayback = exchangeQueue[0];
-  const ownExchange = game.exchangeEvents.filter(event => event.playerId === viewerId).at(-1);
   const dragRef = useRef<{ id: string; pointerId: number; x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef<string | null>(null);
   function finishDrag(event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) {
@@ -816,7 +978,7 @@ function Table({
         <section className="felt-wrap">
           <div className={`felt ${game.players.length > 4 ? "felt-many" : ""} ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
-            <ChibiDealer exchange={exchangePlayback}
+            <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue}
               initialDeal={initialDeal}
               presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
             {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{game.exchangeCount + 1} {" "}{t("av 3")}</div>}
@@ -825,9 +987,11 @@ function Table({
                 ? t("du behöll handen")
                 : t("du bytte {0} kort", [game.exchangeFeedback.changedCards])}
             </div>}
-            {exchangePlayback && <ExchangeFlight key={exchangePlayback.id} event={exchangePlayback}
-              playerName={game.players.find((player) => player.id === exchangePlayback.playerId)?.name ?? t("Spelare")}
-              own={exchangePlayback.playerId === viewerId} />}
+            {exchangePlayback && <ExchangeFlight key={exchangePlayback.event.id} playback={exchangePlayback}
+              playerName={game.players.find((player) => player.id === exchangePlayback.event.playerId)?.name ?? t("Spelare")}
+              own={exchangePlayback.event.playerId === viewerId} releaseCue={releaseCue} onDeal={setDealCue}
+              onLanded={key => setLandedReplacements(current => new Set([...current, key]))}
+              onComplete={() => setExchangeQueue(queue => queue[0]?.event.id === exchangePlayback.event.id ? queue.slice(1) : queue)} />}
             <div className="opponents">
               {opponents.map((player, index) => (
                 <Opponent
@@ -862,8 +1026,8 @@ function Table({
                 <PlayingCard card={pendingExchange.card} />
                 {yourChoice ? <div className="exchange-offer-actions">
                   <span>{t("Ta det visade kortet eller avstå och få nästa kort dolt.")}</span>
-                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(true)}>{t("Ta det visade kortet")}</button>
-                  <button type="button" disabled={exchangeBusy} onClick={() => onExchangeChoice(false)}>{t("Avstå · få ett nytt kort")}</button>
+                  <button type="button" disabled={exchangeBusy || !!exchangePlayback} onClick={() => onExchangeChoice(true)}>{t("Ta det visade kortet")}</button>
+                  <button type="button" disabled={exchangeBusy || !!exchangePlayback} onClick={() => onExchangeChoice(false)}>{t("Avstå · få ett nytt kort")}</button>
                 </div> : <span>{t("Väntar på svar…")}</span>}
               </div>}
               </> : <div className="trick-view" aria-live="polite">
@@ -923,10 +1087,10 @@ function Table({
               {!exchanging && !showResult && <PlayedStack cards={playedCardsForPlayer(game, local.id)} player={local}
                 currentCardIds={currentCardIds} flight={flight} onCardLanded={onCardLanded} />}
               <div className="your-hand">
-                {local.hand.map((card) => (
-                  <div key={card.id} className={exchanging || initialDeal || exchangePlayback ? "dealer-card-reveal" : undefined}
-                    style={ownExchange?.singleCardChoice === "accepted"
-                      ? { "--dealer-release-delay": "0ms" } as CSSProperties : undefined}>
+                {presentedHand.map((card, slot) => (
+                  <div key={card.id} data-dealer-slot={slot}
+                    className={initialDeal && initialCardIds.current.has(card.id) ? "dealer-card-reveal" : undefined}
+                    style={{ visibility: hiddenReplacementIds.has(card.id) ? "hidden" : undefined }}>
                   <PlayingCard
                     card={card}
                     selected={exchanging && selectedCardIds.includes(card.id)}
@@ -966,7 +1130,7 @@ function Table({
               {exchanging && exchangeAllowed && handAction}
               {playingTricks && !game.currentTrick.length && !game.completedTricks.length &&
                 <button type="button" className="button chicago-button" onClick={onDeclareChicago}
-                  disabled={!canDeclareChicago || actionBusy || !!flight}>
+                  disabled={!canDeclareChicago || actionBusy || !!flight || !!exchangeQueue.length}>
                   {t("Säg Chicago · alla fem stick (+15 / −15)")}</button>}
               {playingTricks && !game.chicagoPlayerId && local.score < 15 && !game.completedTricks.length &&
                 <div className="chicago-hint">{t("Chicago kräver minst 15 poäng.")}</div>}
@@ -1031,6 +1195,7 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
   const [reviewedTrickCount, setReviewedTrickCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exchangePlaybackBusy, setExchangePlaybackBusy] = useState(false);
   const [connected, setConnected] = useState(false);
   const gameRef = useRef(game);
   const busyRef = useRef(false);
@@ -1138,7 +1303,7 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
   }
 
   useEffect(() => {
-    if (online || !game || game.phase !== "table" || game.tableStage !== "exchange") return;
+    if (online || exchangePlaybackBusy || !game || game.phase !== "table" || game.tableStage !== "exchange") return;
     const botOffer = game.pendingExchange &&
       game.players.find(player => player.id === game.pendingExchange?.playerId)?.control === "bot";
     if (!botOffer && !needsTimedBotExchange(game)) return;
@@ -1148,10 +1313,10 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
     const timer = window.setTimeout(() => setGame(current => current
       ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), delay);
     return () => window.clearTimeout(timer);
-  }, [game?.phase, game?.tableStage, game?.pendingExchange, game?.activePlayerId, game?.exchangeEventSerial, online]);
+  }, [game?.phase, game?.tableStage, game?.pendingExchange, game?.activePlayerId, game?.exchangeEventSerial, online, exchangePlaybackBusy]);
 
   useEffect(() => {
-    if (online || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
+    if (online || exchangePlaybackBusy || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
     const active = game.players.find((player) => player.id === game.activePlayerId);
     if (!active || active.control !== "bot") return;
     const timer = window.setTimeout(() => {
@@ -1162,7 +1327,7 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
     }, !game.currentTrick.length && !game.completedTricks.length &&
       game.players.some((player) => player.control === "human" && player.score >= 15) ? 5000 : BOT_PAUSE_MS);
     return () => window.clearTimeout(timer);
-  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId, online]);
+  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId, online, exchangePlaybackBusy]);
 
   useEffect(() => {
     if (view?.phase === "table" && view.tableStage === "exchange" &&
@@ -1263,6 +1428,7 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
       {online && !connected && <div className="network-message" role="status">{t("Återansluter till spelservern…")}</div>}</>;
   return <><Table
     key={`${view.matchId}:${view.dealNumber}`}
+    onExchangePlaybackBusy={setExchangePlaybackBusy}
     game={view}
     viewerId={viewerId}
     online={online}

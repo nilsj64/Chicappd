@@ -1358,6 +1358,33 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
   width: 100%;
   height: 100%;
 }
+.replacement-flight-card {
+  position: fixed;
+  z-index: 31;
+  pointer-events: none;
+  perspective: 700px;
+}
+.replacement-card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+}
+.replacement-card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+.replacement-card-front { transform: rotateY(180deg); }
+.replacement-flight-card .card-back,
+.replacement-flight-card .playing-card { width: 100%; height: 100%; }
+.replacement-card-flipping .replacement-card-inner {
+  animation: replacement-card-flip var(--replacement-flip-ms) ease-in-out both;
+}
+@keyframes replacement-card-flip {
+  from { transform: rotateY(0); }
+  to { transform: rotateY(180deg); }
+}
 .exchange-playback-label {
   position: absolute;
   left: 50%;

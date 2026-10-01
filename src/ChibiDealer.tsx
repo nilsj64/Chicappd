@@ -1,28 +1,34 @@
-import { useEffect, useRef, useState } from "react";
-import type { ExchangeEvent } from "./game";
-import { CHIBI_FRAMES, DEALER_ANIMATIONS, DEALER_DEAL_MS, DEALER_FRAME_MS, exchangeNeedsDeal } from "./dealerAnimation";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CHIBI_FRAMES, DEALER_ANIMATIONS, DEALER_DEAL_MS, DEALER_FRAME_MS } from "./dealerAnimation";
 import type { DealerAnimation } from "./dealerAnimation";
 
 /** Decorative playback only; never changes authoritative game state. */
-export default function ChibiDealer({ exchange, initialDeal, presentedExchange }: {
-  exchange?: ExchangeEvent;
+export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, onRelease }: {
+  dealCue?: string;
   initialDeal: boolean;
   presentedExchange?: string;
+  onRelease?: (cue: string) => void;
 }) {
   const [playback, setPlayback] = useState<{ animation: DealerAnimation; id: string }>({
     animation: initialDeal ? "deal" : "idle", id: "round",
   });
   const [frameIndex, setFrameIndex] = useState(0);
-  const lastPresented = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (exchangeNeedsDeal(exchange, lastPresented.current)) {
-      setFrameIndex(0);
-      setPlayback({ animation: "deal", id: `exchange:${exchange!.id}` });
+  const releasedCue = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    // A flight starts only after this release frame exists in the rendered SVG.
+    if (playback.animation === "deal" && frameIndex === 2 && releasedCue.current !== playback.id) {
+      releasedCue.current = playback.id;
+      onRelease?.(playback.id);
     }
-  }, [exchange?.id]);
+  }, [playback, frameIndex, onRelease]);
+  useEffect(() => {
+    if (dealCue) {
+      setFrameIndex(0);
+      setPlayback({ animation: "deal", id: dealCue });
+    }
+  }, [dealCue]);
   useEffect(() => {
     if (!presentedExchange) return;
-    lastPresented.current = presentedExchange;
     setFrameIndex(0);
     setPlayback({ animation: "offer", id: presentedExchange });
   }, [presentedExchange]);
