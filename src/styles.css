@@ -932,6 +932,10 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
     inset 0 0 80px #133e3040,
     0 18px 35px #102e2930;
 }
+.felt-dealer {
+  --dealer-zone-width: clamp(230px, 30%, 440px);
+  padding-right: calc(var(--dealer-zone-width) + 44px);
+}
 .felt:before {
   content: "";
   position: absolute;
@@ -947,12 +951,19 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
   border-radius: 190px;
   pointer-events: none;
 }
-.chibi-dealer {
+.dealer-zone {
   position: absolute;
-  top: 10px;
-  left: 24px;
-  width: 90px;
-  height: 89px;
+  top: 90px;
+  bottom: 100px;
+  right: 20px;
+  width: var(--dealer-zone-width);
+  display: grid;
+  align-content: center;
+  pointer-events: none;
+}
+.chibi-dealer {
+  width: 100%;
+  aspect-ratio: 160 / 158;
   pointer-events: none;
   user-select: none;
 }
@@ -1920,6 +1931,16 @@ input:focus-visible {
   .table-sidebar {
     padding: 24px 17px;
   }
+  /* Keep the dealer on the right, in a reserved header zone when a full
+     side lane would squeeze the five-card hand or the three-seat trick grid. */
+  .felt-dealer {
+    --dealer-zone-width: clamp(120px, 20%, 180px);
+    padding: calc(var(--dealer-zone-width) + 64px) 24px 28px;
+  }
+  .dealer-zone {
+    top: 44px;
+    bottom: auto;
+  }
   .opponents {
     gap: 12px;
   }
@@ -2027,16 +2048,17 @@ input:focus-visible {
     padding: 90px 8px 20px;
     gap: 20px;
   }
+  .felt-dealer {
+    padding: calc(var(--dealer-zone-width) + 58px) 8px 20px;
+  }
   .exchange-round {
     top: 17px;
     right: 20px;
     font-size: 10px;
   }
-  .chibi-dealer {
-    top: 10px;
-    left: 20px;
-    width: 72px;
-    height: 71px;
+  .dealer-zone {
+    top: 38px;
+    right: 16px;
   }
   .hand-combination {
     font-size: 17px;
@@ -2323,4 +2345,12 @@ input:focus-visible {
   .felt-many .opponent { flex-basis: 100px; width: 100px; }
   .felt-many .opponent-cards .card-back { width: 25px; }
   .felt-many .played-stack { transform: scale(.72); transform-origin: center top; height: 85px; }
+}
+
+@media (max-width: 760px) {
+  .felt:not(.felt-tricks) .your-hand { container-type: inline-size; }
+  .felt:not(.felt-tricks) .your-hand .playing-card {
+    width: min(18vw, calc((100cqw - 16px) / 5), 92px);
+    height: min(25vw, calc((100cqw - 16px) / 5 * 1.4), 130px);
+  }
 }

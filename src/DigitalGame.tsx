@@ -872,6 +872,8 @@ function Table({
     geometry.current = positions;
   });
   const exchangePlayback = exchangeQueue[0];
+  // Finish any last delivery before hiding the dealer for trick play.
+  const showDealer = exchanging || exchangeQueue.some(playback => playback.replacements.length > 0);
   useEffect(() => {
     // Animated exchanges finish on the actual final landing/flip callback.
     // Keeps and reduced-motion updates have no moving cards to wait for.
@@ -976,11 +978,13 @@ function Table({
       </header>
       <main className="table-layout">
         <section className="felt-wrap">
-          <div className={`felt ${game.players.length > 4 ? "felt-many" : ""} ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
+          <div className={`felt ${showDealer ? "felt-dealer" : ""} ${game.players.length > 4 ? "felt-many" : ""} ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
-            <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue}
-              initialDeal={initialDeal}
-              presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
+            {showDealer && <div className="dealer-zone">
+              <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue}
+                initialDeal={initialDeal}
+                presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
+            </div>}
             {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{game.exchangeCount + 1} {" "}{t("av 3")}</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
               {t("Kortbyte")}{" "}{game.exchangeFeedback.exchangeCount} {" "}{t("klart ·")}{" "}{game.exchangeFeedback.changedCards === 0
