@@ -73,3 +73,8 @@ export function canDeclareChicago(score: number): boolean {
 export function chicagoResult(wonAllTricks: boolean): 15 | -15 {
   return wonAllTricks ? chicagoPoints : -15;
 }
+
+/** One authority path for normal score victories and immediate Royal Flush wins. */
+export function digitalMatchWinnerId(game: { players: readonly { id: string; score: number; hasDeclaredChicago?: boolean }[]; settings: GameSettings; royalFlushWinnerId?: string | null }): string | null {
+  return game.royalFlushWinnerId ?? matchWinnerId(game.players, game.settings);
+}

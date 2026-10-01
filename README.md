@@ -99,6 +99,7 @@ The public Worker URL is not a credential. Room tokens are generated on the Work
 - `src/poker.ts` ranks five-card hands; `src/tricks.ts` enforces following suit.
 - `server/worker.ts` authenticates temporary seats, persists rooms, validates commands, and broadcasts filtered views.
 - `src/online.ts` handles the browser's session, API requests, and WebSocket reconnection.
-- `src/App.tsx` renders the lobby and table for both online and local rooms.
+- `src/App.tsx` loads feature views; `src/DigitalGame.tsx` renders the lobby and table for both online and local rooms.
+- `docs/frontend-performance.md` records bundle/startup measurements and validation; `node scripts/analyze-bundle.mjs` repeats the dependency-free bundle audit.
 
 Players exchange or keep cards three times. The best qualifying hand scores after exchanges one and two. Five tricks follow; the fifth trick awards five points, then the saved final hands are compared. Scores carry into “Spela en runda till”. A tie for best hand awards no poker points. The server keeps deck order, discards, and other players' hands private. Its stored room survives ordinary page reloads and Worker restarts; refreshing a browser resumes its seat using the saved token.

@@ -3,7 +3,10 @@ import type { HandEvaluation } from "./poker.ts";
 import { chooseBotDiscards, chooseBotTrickCard, shouldBotDeclareChicago } from "./bot.ts";
 import { legalCards, trickWinner } from "./tricks.ts";
 import type { PlayedCard } from "./tricks.ts";
-import { canDeclareChicago, canExchangeCards, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, matchWinnerId, normalizeSettings, scoreAfter, scoreAfterAward, validSettings } from "./scoring.ts";
+import { canDeclareChicago, canExchangeCards, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, digitalMatchWinnerId, normalizeSettings, scoreAfter, scoreAfterAward, validSettings } from "./scoring.ts";
+
+// Preserve the public game API; history can import the lightweight scoring module.
+export { digitalMatchWinnerId } from "./scoring.ts";
 
 export const suits = ["spades", "hearts", "diamonds", "clubs"] as const;
 export const ranks = [
@@ -336,11 +339,6 @@ function scorePokerHands(
       ? `${best!.name} hade bästa hand (${handCategoryName[evaluations[winnerId].category]}) och fick ${points} poäng${exchangeCount === 3 ? " vid rundans slut" : ` efter byte ${exchangeCount}`}`
       : `Ingen fick poäng för handen efter byte ${exchangeCount}`],
   };
-}
-
-/** One authority path for normal score victories and immediate Royal Flush wins. */
-export function digitalMatchWinnerId(game: { players: readonly { id: string; score: number; hasDeclaredChicago?: boolean }[]; settings: GameSettings; royalFlushWinnerId?: string | null }): string | null {
-  return game.royalFlushWinnerId ?? matchWinnerId(game.players, game.settings);
 }
 
 function finishRoyalFlush(game: GameState): GameState {

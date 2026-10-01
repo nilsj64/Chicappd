@@ -22,11 +22,11 @@ const server=await createServer({configFile:false,envFile:false,cacheDir,server:
   // The browser-only provider has no SSR snapshot. Supply it only in this test
   // transform; its real state/records are still used and no source is changed.
   plugins:[{name:"test-ssr-snapshot",enforce:"pre",transform(code,id,options){
-    if(options?.ssr && id.endsWith("/App.tsx")) return code + "\nexport { Table, Entry, Lobby };";
+    if(options?.ssr && id.endsWith("/DigitalGame.tsx")) return code + "\nexport { Table, Entry, Lobby };";
     if(options?.ssr && id.endsWith("/HistoryProvider.tsx")) return code.replace(/useSyncExternalStore\((\w+)\.subscribe, \1\.getSnapshot\)/g,"useSyncExternalStore($1.subscribe, $1.getSnapshot, $1.getSnapshot)");
   }}]});
-const [{LanguageProvider,LanguageSwitch},{HistoryProvider},{default:App,Table,Entry,Lobby},{default:Physical},{default:Digital},{AccountIdentity}]=await Promise.all([
-  server.ssrLoadModule("/src/LanguageProvider.tsx"),server.ssrLoadModule("/src/HistoryProvider.tsx"),server.ssrLoadModule("/src/App.tsx"),
+const [{LanguageProvider,LanguageSwitch},{HistoryProvider},{default:App},{Table,Entry,Lobby},{default:Physical},{default:Digital},{AccountIdentity}]=await Promise.all([
+  server.ssrLoadModule("/src/LanguageProvider.tsx"),server.ssrLoadModule("/src/HistoryProvider.tsx"),server.ssrLoadModule("/src/App.tsx"),server.ssrLoadModule("/src/DigitalGame.tsx"),
   server.ssrLoadModule("/src/IRLTable.tsx"),server.ssrLoadModule("/src/DigitalHistoryPanel.tsx"),server.ssrLoadModule("/src/AccountControl.tsx")]);
 const originalStorage=globalThis.localStorage;
 after(async()=>{globalThis.localStorage=originalStorage;await server.close();fs.rmSync(cacheDir,{recursive:true,force:true});});

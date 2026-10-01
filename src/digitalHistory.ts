@@ -1,6 +1,6 @@
 import type { GameView, GameSettings, CompletedTrick } from "./game.ts";
 import type { HistoryOptions } from "./history.ts";
-import { digitalMatchWinnerId } from "./game.ts";
+import { digitalMatchWinnerId } from "./scoring.ts";
 import { evaluateHand, compareHands, handCategories, isRoyalFlush } from "./poker.ts";
 import type { HandEvaluation } from "./poker.ts";
 import type { HistoryRecord } from "./history.ts";

@@ -1,30 +1,32 @@
-import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-let client: SupabaseClient | null | undefined;
+let client: Promise<SupabaseClient | null> | undefined;
 
-/** Optional account services can use this client; guest play never requires it. */
-export function getSupabaseClient(): SupabaseClient | null {
-  if (client !== undefined) return client;
+export function hasSupabaseConfiguration(): boolean {
+  return !!(import.meta.env.VITE_SUPABASE_URL?.trim() && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim());
+}
 
-  const url = import.meta.env.VITE_SUPABASE_URL?.trim();
-  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
-  client = null;
-  if (!url || !key) return client;
-
-  try {
-    client = createClient(url, key, {
-      auth: {
-        storageKey: "chicappd-supabase-auth",
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false,
-      },
-    });
-  } catch {
-    // A bad local configuration must not prevent guest play or expose key values.
-    console.warn("Supabase is unavailable. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.");
-  }
+/** Restore accounts after the shell renders, without putting the SDK in its bundle. */
+export function getSupabaseClient(): Promise<SupabaseClient | null> {
+  if (client) return client;
+  if (!hasSupabaseConfiguration()) return client = Promise.resolve(null);
+  client = (async () => {
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      return createClient(import.meta.env.VITE_SUPABASE_URL!.trim(), import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY!.trim(), {
+        auth: {
+          storageKey: "chicappd-supabase-auth",
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+        },
+      });
+    } catch {
+      // Keep guest play available without exposing configuration values.
+      console.warn("Supabase is unavailable. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.");
+      return null;
+    }
+  })();
   return client;
 }
 
