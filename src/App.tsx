@@ -20,7 +20,7 @@ import type { OnlineSession } from "./online";
 import IRLTable from "./IRLTable";
 import Brand, { BrandMark } from "./Brand";
 import { Icon, SuitIcon } from "./Icon";
-import { canExchangeCards, chicagoBreakPoints, matchWinnerId, scoreStandings } from "./scoring";
+import { canExchangeCards, matchWinnerId, scoreStandings } from "./scoring";
 import { MatchPodium } from "./MatchPodium";
 import MonkeyDealer from "./MonkeyDealer";
 import AccountControl from "./AccountControl";
@@ -447,9 +447,9 @@ function Lobby({
                   <option value="no">{t("Tillåt inte minuspoäng")}</option><option value="yes">{t("Tillåt minuspoäng")}</option>
                 </select>
               </label>
-              <label>{t("Kräv över 52 poäng för vinst")}<select value={game.settings.requireOver52ToWin ? "yes" : "no"} disabled={game.ownerId !== viewerId}
-                  onChange={(event) => onSettings({ ...game.settings, requireOver52ToWin: event.target.value === "yes" })}>
-                  <option value="no">{t("Av · minst 52 poäng")}</option><option value="yes">{t("På · minst 53 poäng")}</option>
+              <label>{t("Första som bryter Chicago får 10 poäng")}<select value={game.settings.firstChicagoBreakBonus ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+                  onChange={(event) => onSettings({ ...game.settings, firstChicagoBreakBonus: event.target.value === "yes" })}>
+                  <option value="no">{t("Av")}</option><option value="yes">{t("På")}</option>
                 </select>
               </label>
               <label>{t("Nollställ vid över 52 poäng utan Chicago")}<select value={game.settings.resetOver52WithoutChicago ? "yes" : "no"} disabled={game.ownerId !== viewerId}
@@ -685,7 +685,7 @@ function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; vi
         ))}
       </div>
       <div className="score-foot">
-        {t("✓ = har sagt Chicago ·")}{" "}{settings.requireOver52ToWin ? t("Över 52 poäng krävs för vinst (minst 53).") : t("Minst 52 poäng krävs för vinst.")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
+        {t("✓ = har sagt Chicago ·")}{" "}{t("Över 52 poäng krävs för vinst (minst 53).")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
       </div>
     </aside>
   );
@@ -921,7 +921,7 @@ function Table({
                 {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
                   {t("Chicago:")}{" "}<strong>{chicagoPlayer.name}</strong> {" "}{t("satsar på alla stick")}{!game.currentTrick.length && !game.completedTricks.length && <small>{t("Ordinarie första utspelaren har företräde, därefter gäller spelordningen. Chicago-spelaren börjar; valet låses vid första kortet.")}</small>}
-                  {chicagoBreaker && <small>{chicagoBreaker.name} {" "}{t("bröt Chicago och får")}{" "}{chicagoBreakPoints} {" "}{t("poäng")}</small>}
+                  {chicagoBreaker && <small>{message(game.activity.find(event => event === `${chicagoBreaker.name} bröt Chicago (+10 p)`) ?? `${chicagoBreaker.name} bröt Chicago`)}</small>}
                 </div>}
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
                   <div className="trick-cue">{leadPlayer.name} {" "}{t("spelar ut")}</div>}

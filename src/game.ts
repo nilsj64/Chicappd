@@ -47,7 +47,7 @@ export type TrickAward = { winnerId: string; points: number };
 export type GameSettings = {
   finalTrickPoints: 2 | 5;
   allowNegativeScores: boolean;
-  requireOver52ToWin: boolean;
+  firstChicagoBreakBonus: boolean;
   resetOver52WithoutChicago: boolean;
 };
 export type ChicagoAward = { playerId: string; points: 15 | -15 };
@@ -77,6 +77,7 @@ export type GameState = {
   settings: GameSettings;
   chicagoPlayerId: string | null;
   chicagoBreakerId: string | null;
+  chicagoBreakBonusAwarded: boolean;
   chicagoAward: ChicagoAward | null;
   activity: string[];
   currentTrick: PlayedCard[];
@@ -171,6 +172,7 @@ export function createRoom(
     finalHands: null,
     finalTrickAward: null,
     settings: { ...defaultSettings },
+    chicagoBreakBonusAwarded: false,
     chicagoPlayerId: null,
     chicagoBreakerId: null,
     chicagoAward: null,
@@ -541,8 +543,10 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
   const winnerName = players.find((candidate) => candidate.id === winnerId)!.name;
   const firstBreak = game.chicagoPlayerId && winnerId !== game.chicagoPlayerId && !game.chicagoBreakerId;
   const chicagoBreakerId = firstBreak ? winnerId : game.chicagoBreakerId;
-  const scoredPlayers = firstBreak ? addPoints(game, players, winnerId, chicagoBreakPoints) : players;
-  const breakActivity = firstBreak ? [`${winnerName} bröt Chicago (+${chicagoBreakPoints} p)`] : [];
+  const awardBreakBonus = firstBreak && game.settings.firstChicagoBreakBonus && !game.chicagoBreakBonusAwarded;
+  const chicagoBreakBonusAwarded = !!game.chicagoBreakBonusAwarded || !!awardBreakBonus;
+  const scoredPlayers = awardBreakBonus ? addPoints(game, players, winnerId, chicagoBreakPoints) : players;
+  const breakActivity = firstBreak ? [`${winnerName} bröt Chicago${awardBreakBonus ? ` (+${chicagoBreakPoints} p)` : ""}`] : [];
   if (completedTricks.length === 5) {
     const points = finalTrickPoints(game.settings);
     const chicagoAward: ChicagoAward | null = game.chicagoPlayerId
@@ -554,6 +558,7 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
       ...game,
       players: withChicago,
       chicagoBreakerId,
+      chicagoBreakBonusAwarded,
       chicagoAward,
       currentTrick: [],
       completedTricks,
@@ -573,6 +578,7 @@ function playCard(game: GameState, playerId: string, cardId: string): GameState 
     ...game,
     players: scoredPlayers,
     chicagoBreakerId,
+    chicagoBreakBonusAwarded,
     currentTrick: [],
     completedTricks,
     activePlayerId: winnerId,
@@ -759,6 +765,7 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
     settings: normalizeSettings(game.settings),
     chicagoPlayerId: game.chicagoPlayerId ?? null,
     chicagoBreakerId: game.chicagoBreakerId ?? null,
+    chicagoBreakBonusAwarded: game.chicagoBreakBonusAwarded ?? false,
     chicagoAward: game.chicagoAward ?? null,
     currentTrick: game.currentTrick.map((played) => ({ ...played })),
     completedTricks: game.completedTricks.map((trick) => ({ winnerId: trick.winnerId,

@@ -2,7 +2,7 @@ import type { GameSettings } from "./game.ts";
 
 export const defaultSettings: GameSettings = {
   finalTrickPoints: 5, allowNegativeScores: false,
-  requireOver52ToWin: false, resetOver52WithoutChicago: false,
+  firstChicagoBreakBonus: false, resetOver52WithoutChicago: false,
 };
 
 /** Older saved rooms omit the optional rules; they use the default off state. */
@@ -10,7 +10,7 @@ export function normalizeSettings(settings?: Partial<GameSettings>): GameSetting
   return {
     finalTrickPoints: settings?.finalTrickPoints ?? defaultSettings.finalTrickPoints,
     allowNegativeScores: settings?.allowNegativeScores ?? false,
-    requireOver52ToWin: settings?.requireOver52ToWin ?? false,
+    firstChicagoBreakBonus: settings?.firstChicagoBreakBonus ?? false,
     resetOver52WithoutChicago: settings?.resetOver52WithoutChicago ?? false,
   };
 }
@@ -18,7 +18,7 @@ export function normalizeSettings(settings?: Partial<GameSettings>): GameSetting
 export function validSettings(settings: GameSettings): boolean {
   return !!settings && [2, 5].includes(settings.finalTrickPoints) &&
     typeof settings.allowNegativeScores === "boolean" &&
-    [settings.requireOver52ToWin, settings.resetOver52WithoutChicago].every(value =>
+    [settings.firstChicagoBreakBonus, settings.resetOver52WithoutChicago].every(value =>
       value === undefined || typeof value === "boolean");
 }
 export const chicagoThreshold = 15;
@@ -31,8 +31,8 @@ export function canExchangeCards(score: number): boolean {
   return score < exchangeLockScore;
 }
 
-export function matchWinnerId(players: readonly { id: string; score: number; hasDeclaredChicago?: boolean }[], settings?: GameSettings): string | null {
-  const eligible = players.filter((player) => (settings?.requireOver52ToWin ? player.score > winningScore : player.score >= winningScore) && player.hasDeclaredChicago);
+export function matchWinnerId(players: readonly { id: string; score: number; hasDeclaredChicago?: boolean }[], _settings?: GameSettings): string | null {
+  const eligible = players.filter((player) => player.score > winningScore && player.hasDeclaredChicago);
   if (!eligible.length) return null;
   const highest = Math.max(...eligible.map((player) => player.score));
   const leaders = eligible.filter((player) => player.score === highest);

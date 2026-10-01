@@ -17,13 +17,14 @@ type IRLSnapshot = {
   dealNumber: number;
   phase: "hands" | "tricks" | "result";
   chicagoPlayerId: string | null;
+  chicagoBreakBonusAwarded: boolean;
   lastSummary: string[];
 };
 export type IRLGame = IRLSnapshot & { history: IRLSnapshot[] };
 
 function snapshot(game: IRLGame): IRLSnapshot {
   const { history: _history, ...current } = game;
-  return current;
+  return { ...current, settings: normalizeSettings(current.settings), chicagoBreakBonusAwarded: current.chicagoBreakBonusAwarded ?? false };
 }
 
 function commit(game: IRLGame, next: IRLSnapshot): IRLGame {
@@ -50,7 +51,7 @@ export function createIRLGame(names: string[], settings: GameSettings): IRLGame 
     !validSettings(settings)) return null;
   return { players: trimmed.map((name, index) => ({ id: `irl-${index + 1}`, name, score: 0, hasDeclaredChicago: false })),
     settings: normalizeSettings(settings), dealNumber: 1, phase: "hands", chicagoPlayerId: null,
-    lastSummary: [], history: [] };
+    chicagoBreakBonusAwarded: false, lastSummary: [], history: [] };
 }
 
 export function recordFirstHands(game: IRLGame, hands: [HandResult, HandResult]): IRLGame {
@@ -82,12 +83,17 @@ export function finishIRLDeal(game: IRLGame, result: DealResult): IRLGame {
       (!result.chicagoWon && (!result.breakerId || !hasPlayer(game, result.breakerId) || result.breakerId === game.chicagoPlayerId))) return game;
   } else if (result.chicagoWon !== undefined || result.breakerId) return game;
 
+  let chicagoBreakBonusAwarded = game.chicagoBreakBonusAwarded ?? false;
   let players = award(game, game.players, result.finalTrickWinnerId, finalTrickPoints(game.settings));
   const summary = [...game.lastSummary, `Sista sticket: ${players.find((p) => p.id === result.finalTrickWinnerId)!.name} +${finalTrickPoints(game.settings)} enligt regeln för sista sticket`];
   if (game.chicagoPlayerId) {
     if (result.breakerId) {
-      players = award(game, players, result.breakerId, chicagoBreakPoints);
-      summary.push(`Bröt Chicago: ${players.find((p) => p.id === result.breakerId)!.name} +${chicagoBreakPoints}`);
+      const bonus = game.settings.firstChicagoBreakBonus && !chicagoBreakBonusAwarded;
+      if (bonus) {
+        players = award(game, players, result.breakerId, chicagoBreakPoints);
+        chicagoBreakBonusAwarded = true;
+      }
+      summary.push(`Bröt Chicago: ${players.find((p) => p.id === result.breakerId)!.name}${bonus ? ` +${chicagoBreakPoints}` : ""}`);
     }
     const points = chicagoResult(result.chicagoWon!);
     players = award(game, players, game.chicagoPlayerId, points);
@@ -98,7 +104,7 @@ export function finishIRLDeal(game: IRLGame, result: DealResult): IRLGame {
     players = award(game, players, result.finalHand.playerId, points);
     summary.push(`Sluthand: ${players.find((p) => p.id === result.finalHand!.playerId)!.name} hade bästa hand (${handCategoryName[result.finalHand.category]}) och fick ${points} poäng`);
   }
-  return commit(game, { ...snapshot(game), players, phase: "result", lastSummary: summary });
+  return commit(game, { ...snapshot(game), players, chicagoBreakBonusAwarded, phase: "result", lastSummary: summary });
 }
 
 export function nextIRLDeal(game: IRLGame): IRLGame {

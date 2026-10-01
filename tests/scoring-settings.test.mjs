@@ -5,7 +5,7 @@ import { applyCommand, createDeck, createRoom, startRound, viewForPlayer } from 
 import { createIRLGame, correctIRLScore, recordFirstHands, finishIRLDeal, nextIRLDeal } from "../src/irl.ts";
 
 test("optional rules default off and old settings normalize, while room settings survive views and rounds", () => {
-  assert.equal(defaultSettings.requireOver52ToWin, false);
+  assert.equal(defaultSettings.firstChicagoBreakBonus, false);
   assert.equal(defaultSettings.resetOver52WithoutChicago, false);
   const old = { finalTrickPoints: 2, allowNegativeScores: true };
   assert.deepEqual(normalizeSettings(old), { ...defaultSettings, ...old });
@@ -13,10 +13,10 @@ test("optional rules default off and old settings normalize, while room settings
   room = applyCommand(room, { type: "add-human", actorId: "ada", playerId: "bea", name: "Bea" });
   assert.deepEqual(room.settings, defaultSettings);
   assert.deepEqual(viewForPlayer({ ...room, settings: old }, "bea").settings, normalizeSettings(old));
-  for (const key of ["requireOver52ToWin", "resetOver52WithoutChicago"]) {
+  for (const key of ["firstChicagoBreakBonus", "resetOver52WithoutChicago"]) {
     assert.strictEqual(applyCommand(room, { type: "set-settings", actorId: "ada", settings: { ...defaultSettings, [key]: "yes" } }), room);
   }
-  const settings = { ...defaultSettings, requireOver52ToWin: true, resetOver52WithoutChicago: true };
+  const settings = { ...defaultSettings, firstChicagoBreakBonus: true, resetOver52WithoutChicago: true };
   assert.strictEqual(applyCommand(room, { type: "set-settings", actorId: "bea", settings }), room);
   room = applyCommand(room, { type: "set-settings", actorId: "ada", settings });
   assert.deepEqual(viewForPlayer(room, "bea").settings, settings);
@@ -27,14 +27,14 @@ test("optional rules default off and old settings normalize, while room settings
   assert.deepEqual(createIRLGame(["Ada", "Bea"], settings).settings, settings);
 });
 
-for (const requireOver52ToWin of [false, true]) {
+for (const firstChicagoBreakBonus of [false, true]) {
   for (const resetOver52WithoutChicago of [false, true]) {
-    const settings = { ...defaultSettings, requireOver52ToWin, resetOver52WithoutChicago };
-    test(`rule combination: over-52 victory=${requireOver52ToWin}, reset=${resetOver52WithoutChicago}`, () => {
+    const settings = { ...defaultSettings, firstChicagoBreakBonus, resetOver52WithoutChicago };
+    test(`rule combination: Chicago break bonus=${firstChicagoBreakBonus}, reset=${resetOver52WithoutChicago}`, () => {
       for (const hasDeclaredChicago of [false, true]) {
         for (const score of [51, 52, 53]) {
           const player = { id: "ada", score, hasDeclaredChicago };
-          assert.equal(matchWinnerId([player], settings), hasDeclaredChicago && (requireOver52ToWin ? score > 52 : score >= 52) ? "ada" : null);
+          assert.equal(matchWinnerId([player], settings), hasDeclaredChicago && score > 52 ? "ada" : null);
         }
         const at52 = scoreAfterAward({ score: 50, hasDeclaredChicago }, 2, settings);
         const over52 = scoreAfterAward({ score: 50, hasDeclaredChicago }, 3, settings);

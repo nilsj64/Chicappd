@@ -29,8 +29,8 @@ function RuleSettings({ settings, onChange }: { settings: GameSettings; onChange
         <option value="no">{t("Tillåt inte minuspoäng")}</option><option value="yes">{t("Tillåt minuspoäng")}</option>
       </select>
     </label>
-    <label>{t("Kräv över 52 poäng för vinst")}<select value={settings.requireOver52ToWin ? "yes" : "no"} onChange={(event) => onChange({ ...settings, requireOver52ToWin: event.target.value === "yes" })}>
-        <option value="no">{t("Av · minst 52 poäng")}</option><option value="yes">{t("På · minst 53 poäng")}</option>
+    <label>{t("Första som bryter Chicago får 10 poäng")}<select value={settings.firstChicagoBreakBonus ? "yes" : "no"} onChange={(event) => onChange({ ...settings, firstChicagoBreakBonus: event.target.value === "yes" })}>
+        <option value="no">{t("Av")}</option><option value="yes">{t("På")}</option>
       </select>
     </label>
     <label>{t("Nollställ vid över 52 poäng utan Chicago")}<select value={settings.resetOver52WithoutChicago ? "yes" : "no"} onChange={(event) => onChange({ ...settings, resetOver52WithoutChicago: event.target.value === "yes" })}>
@@ -172,7 +172,7 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
           {game.chicagoPlayerId && <div className="irl-chicago-result"><h3>{t("Hur gick Chicago?")}</h3>
             <div className="irl-player-buttons"><button type="button" className={chicagoWon === true ? "selected" : ""} onClick={() => { setChicagoWon(true); setBreakerId(""); }}>{t("Alla stick · +15")}</button>
               <button type="button" className={chicagoWon === false ? "selected" : ""} onClick={() => setChicagoWon(false)}>{t("Bruten · −15")}</button></div>
-            {chicagoWon === false && <label className="irl-field">{t("Vem tog första sticket från Chicago-spelaren? · +10 p")}<select value={breakerId} onChange={(event) => setBreakerId(event.target.value)}><option value="">{t("Välj spelare")}</option>
+            {chicagoWon === false && <label className="irl-field">{t("Vem tog första sticket från Chicago-spelaren?")}<select value={breakerId} onChange={(event) => setBreakerId(event.target.value)}><option value="">{t("Välj spelare")}</option>
                 {game.players.filter((player) => player.id !== game.chicagoPlayerId).map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select>
             </label>}</div>}
           {resultError && <p role="alert" className="irl-error">{errorMessage(resultError)}</p>}
@@ -206,9 +206,10 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
         }}>{newMatchReady ? t("Bekräfta ny match (nollställ)") : t("Starta ny match")}</button>
         {newMatchReady && <button type="button" onClick={() => setNewMatchReady(false)}>{t("Avbryt")}</button>}
       </div><div className="irl-rules"><strong>{t("REGLER")}</strong><p>{t("Bästa handen ger 1–8 poäng efter byte 1, byte 2 och vid givens slut. Sista sticket ger")}{" "}{finalTrickPoints(game.settings)} {" "}{t("poäng.")}</p>
-        <p>{game.settings.requireOver52ToWin ? t("Över 52 poäng (minst 53)") : t("Minst 52 poäng")} {" "}{t("vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.")}</p>
+        <p>{t("Över 52 poäng (minst 53)")} {" "}{t("vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.")}</p>
         {game.settings.resetOver52WithoutChicago && <p>{t("Över 52 poäng utan att ha sagt Chicago nollställer totalpoängen till 0 efter poängutdelning.")}</p>}
-        <p>{t("Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15. Den som först bryter får +10.")}</p>
+        <p>{t("Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15.")}</p>
+        {game.settings.firstChicagoBreakBonus && <p>{t("Första som bryter Chicago får 10 poäng")}{" · "}{t("En gång per spel.")}</p>}
         <p>{game.settings.allowNegativeScores ? t("Minuspoäng tillåts.") : t("Totalpoäng stannar vid 0.")}</p></div></aside>
     </main>}
     </>}

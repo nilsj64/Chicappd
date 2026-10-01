@@ -76,3 +76,8 @@ test("English exchange and trick hints keep the same recommendations", () => {
     assert.doesNotMatch(JSON.stringify(en),/poäng|hjärter|spader|behåll|bygger|kort\./i);
   }
 });
+
+test("Chicago breaks without a bonus translate without promising points", () => {
+  assert.equal(localizeMessage("en", "Ada bröt Chicago"), "Ada broke Chicago");
+  assert.equal(localizeMessage("en", "Bröt Chicago: Ada"), "Broke Chicago: Ada");
+});

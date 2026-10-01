@@ -391,11 +391,11 @@ test("optional rules default off, sync to opponents and survive round start and 
   const code = owner.view.roomCode;
   const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Bea" } });
   try {
-    assert.equal(owner.view.settings.requireOver52ToWin, false);
+    assert.equal(owner.view.settings.firstChicagoBreakBonus, false);
     assert.equal(owner.view.settings.resetOver52WithoutChicago, false);
-    for (const requireOver52ToWin of [false, true]) {
+    for (const firstChicagoBreakBonus of [false, true]) {
       for (const resetOver52WithoutChicago of [false, true]) {
-        const settings = { ...owner.view.settings, requireOver52ToWin, resetOver52WithoutChicago };
+        const settings = { ...owner.view.settings, firstChicagoBreakBonus, resetOver52WithoutChicago };
         assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token, body: { type: "set-settings", settings } })).status, 409);
         const changed = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "set-settings", settings } });
         assert.equal(changed.status, 200);
@@ -404,7 +404,7 @@ test("optional rules default off, sync to opponents and survive round start and 
       }
     }
     const started = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "start-round" } });
-    assert.equal(started.view.settings.requireOver52ToWin, true);
+    assert.equal(started.view.settings.firstChicagoBreakBonus, true);
     assert.equal(started.view.settings.resetOver52WithoutChicago, true);
     assert.deepEqual((await call(`/rooms/${code}/state`, { token: guest.token })).view.settings, started.view.settings);
   } finally {

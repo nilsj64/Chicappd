@@ -156,3 +156,14 @@ test("editing during an in-flight save leaves the newer revision pending", async
   cloud.update = update; await store.sync();
   assert.equal((await cloud.list("alice"))[0].game.players[0].score, 20);
 });
+
+test("Chicago bonus settings and awarded marker survive local and cloud history reload", async () => {
+  const disk = storage(), cloud = remote(), store = new HistoryStore(disk);
+  const saved = { ...createIRLGame(["Ada", "Bo"], { ...defaultSettings, firstChicagoBreakBonus: true }), chicagoBreakBonusAwarded: true };
+  store.setGame(saved);
+  assert.deepEqual(selected(new HistoryStore(disk)), saved);
+  store.setOwner("alice", cloud); await store.sync();
+  const fresh = new HistoryStore(storage());
+  fresh.setOwner("alice", cloud); await fresh.sync();
+  assert.deepEqual(fresh.getSnapshot().records[0].game, saved);
+});

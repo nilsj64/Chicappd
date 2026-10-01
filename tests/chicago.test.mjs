@@ -70,7 +70,8 @@ test("winning Chicago awards 15 once and keeps normal final-trick points", () =>
 });
 
 test("first breaker alone gets 10 and losing Chicago costs 15", () => {
-  let game = applyCommand(setup(false), { type: "declare-chicago", actorId: "ada" });
+  const initial = setup(false);
+  let game = applyCommand({ ...initial, settings: { ...initial.settings, firstChicagoBreakBonus: true } }, { type: "declare-chicago", actorId: "ada" });
   game = playAll(game);
   assert.deepEqual(game.chicagoAward, { playerId: "ada", points: -15 });
   assert.equal(game.chicagoBreakerId, "bea");
@@ -90,7 +91,7 @@ test("negative-score setting applies to Chicago and 2/5 remains final-trick scor
     game = { ...game, players: game.players.map((p) => p.id === "ada" ? { ...p, score: 8 } : p) };
     game = playAll(game);
     assert.equal(game.players[0].score, allowNegativeScores ? -7 : 0);
-    assert.equal(game.players[1].score, 12);
+    assert.equal(game.players[1].score, 2);
     assert.equal(game.finalTrickAward.points, 2);
   }
   const normal = playAll({ ...setup(false), settings: { finalTrickPoints: 2, allowNegativeScores: false } });
@@ -166,3 +167,25 @@ test("the Chicago claimant leads, turn order wraps once and only the trick winne
   assert.equal(takeover.activePlayerId, "cid");
   assert.equal(takeover.roundStarterId, "cid");
 });
+
+for (const enabled of [false, true]) {
+  test(`Chicago break bonus ${enabled ? "ON" : "OFF"} persists across three rounds and restored state`, () => {
+    let game = setup(false);
+    game.settings = { ...defaultSettings, firstChicagoBreakBonus: enabled };
+    for (let round = 0; round < 3; round++) {
+      const fixture = setup(false);
+      game = { ...fixture, settings: game.settings, chicagoBreakBonusAwarded: game.chicagoBreakBonusAwarded,
+        players: fixture.players.map((p, i) => ({ ...p, score: i === 0 ? 15 : game.players[i].score })) };
+      const before = game.players[1].score;
+      game = playAll(applyCommand(game, { type: "declare-chicago", actorId: "ada" }));
+      assert.equal(game.players[1].score - before, 5 + (enabled && round === 0 ? 10 : 0));
+      assert.equal(game.chicagoBreakBonusAwarded, enabled);
+      const view = viewForPlayer(game, "bea");
+      assert.equal(view.chicagoBreakBonusAwarded, enabled);
+      game = applyCommand(game, { type: "start-round", actorId: "ada" });
+      assert.equal(game.chicagoBreakBonusAwarded, enabled);
+      game = JSON.parse(JSON.stringify(game));
+    }
+    assert.equal(createRoom("Ada", "NEW", "ada").chicagoBreakBonusAwarded, false);
+  });
+}

@@ -46,7 +46,7 @@ test("physical Chicago requires 15 and awards a win once", () => {
 
 test("first Chicago breaker gets 10 and negative setting controls floor", () => {
   for (const allowNegativeScores of [false, true]) {
-    let game = createIRLGame(players, { finalTrickPoints: 2, allowNegativeScores });
+    let game = createIRLGame(players, { finalTrickPoints: 2, allowNegativeScores, firstChicagoBreakBonus: true });
     game = recordFirstHands(game, [null, null]);
     game = correctIRLScore(game, "irl-1", 15);
     game = declareIRLChicago(game, "irl-1");
@@ -60,7 +60,7 @@ test("first Chicago breaker gets 10 and negative setting controls floor", () => 
 });
 
 test("physical match requires Chicago and more than 52 points to end", () => {
-  let game = createIRLGame(players, { ...settings, requireOver52ToWin: true });
+  let game = createIRLGame(players, { ...settings });
   game = correctIRLScore(game, "irl-1", 52);
   game = recordFirstHands(game, [null, null]);
   game = finishIRLDeal(game, { finalHand: null, finalTrickWinnerId: "irl-2" });
@@ -85,3 +85,25 @@ test("manual score correction is undoable", () => {
   assert.equal(game.players[1].score, 0);
   assert.strictEqual(correctIRLScore(game, "irl-2", -1), game);
 });
+
+for (const enabled of [false, true]) {
+  test(`physical Chicago break bonus ${enabled ? "ON" : "OFF"} is awarded only once per game`, () => {
+    let game = createIRLGame(players, { ...settings, firstChicagoBreakBonus: enabled });
+    for (let deal = 0; deal < 3; deal++) {
+      game = correctIRLScore(game, "irl-1", 15);
+      game = recordFirstHands(game, [null, null]);
+      game = declareIRLChicago(game, "irl-1");
+      const breakerId = deal === 0 ? "irl-3" : "irl-2";
+      const before = game.players.find(p => p.id === breakerId).score;
+      const previous = game;
+      game = finishIRLDeal(game, { finalHand: null, finalTrickWinnerId: "irl-1", chicagoWon: false, breakerId });
+      assert.equal(game.players.find(p => p.id === breakerId).score - before, enabled && deal === 0 ? 10 : 0);
+      assert.equal(game.chicagoBreakBonusAwarded, enabled);
+      assert.deepEqual(undoIRL(game), previous);
+      game = nextIRLDeal(JSON.parse(JSON.stringify(game)));
+      assert.equal(game.settings.firstChicagoBreakBonus, enabled);
+      assert.equal(game.chicagoBreakBonusAwarded, enabled);
+    }
+    assert.equal(createIRLGame(players, settings).chicagoBreakBonusAwarded, false);
+  });
+}
