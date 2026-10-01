@@ -93,3 +93,14 @@ test('Royal Flush result advice does not claim a final trick was played',()=>{
  assert.match(supportAdvice(v,'ada','en').context,/without playing tricks/);
  assert.doesNotMatch(supportAdvice(v,'ada','en').context,/gave .* points/);
 });
+
+test('Royal Flush immediate victory ignores Chicago requirement ON and OFF',()=>{
+  for(const chicagoRequiredToWin of [true,false]) {
+    let g=exchangeTable();g={...g,settings:{...g.settings,chicagoRequiredToWin}};
+    g=applyCommand(g,{type:'exchange',actorId:'ada',discardIds:['spades-2']});
+    g=applyCommand(g,{type:'exchange-choice',actorId:'ada',accept:true});
+    assert.equal(g.tableStage,'result');assert.equal(digitalMatchWinnerId(g),'ada');
+    assert.equal(g.players[0].hasDeclaredChicago,false);
+    assert.equal(digitalResult(viewForPlayer(g,'ada'),'online','ada').settings.chicagoRequiredToWin,chicagoRequiredToWin);
+  }
+});

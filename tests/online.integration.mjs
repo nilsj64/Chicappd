@@ -4,13 +4,22 @@ import assert from "node:assert/strict";
 import { legalCards } from "../src/tricks.ts";
 
 const base = process.env.CHICAPPD_TEST_API ?? "http://localhost:8787";
-async function call(path, { method = "GET", token, body } = {}) {
+async function call(path, { method = "GET", token, body, settleBots = true } = {}) {
   const response = await fetch(`${base}${path}`, {
     method,
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return { status: response.status, ...await response.json() };
+  const result = { status: response.status, ...await response.json() };
+  if (settleBots && path.endsWith("/command") && result.status === 200) {
+    const started = Date.now();
+    while (result.view?.pendingExchange && result.view.players.find(p => p.id === result.view.pendingExchange.playerId)?.control === "bot") {
+      assert.ok(Date.now() - started < 20000, "CPU offers must settle through Worker alarms");
+      await new Promise(resolve => setTimeout(resolve, 100));
+      result.view = (await call(path.replace(/command$/, "state"), { token })).view;
+    }
+  }
+  return result;
 }
 function watch(code, token) {
   const socket = new WebSocket(`${base.replace(/^http/, "ws")}/rooms/${code}/events?token=${token}`);
@@ -85,7 +94,10 @@ async function finishRoomWithBots(code, seats) {
       continue;
     }
     const actor = byId.get(state.activePlayerId);
-    assert.ok(actor, "the Worker must complete CPU turns before waiting for a human");
+    if (!actor) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      continue;
+    }
     const view = (await call(`/rooms/${code}/state`, { token: actor.token })).view;
     const hand = view.players.find((player) => player.id === actor.playerId).hand;
     const card = legalCards(hand, view.currentTrick[0]?.card.suit ?? null)[0];
@@ -323,22 +335,25 @@ test("two real room clients complete a round with private hands and live updates
   } finally { wa.socket.close(); wb.socket.close(); }
 });
 
-test("four humans can join, play a full round, and a fifth is refused", async () => {
+for (const count of [2, 3, 4, 5, 6]) test(`${count} humans can join and play a full round`, async () => {
   const owner = await call("/rooms", { method: "POST", body: { name: "Ada" } });
   assert.equal(owner.status, 201);
   const code = owner.view.roomCode;
   const seats = [owner];
-  for (const name of ["Bo", "Cy", "Dee"]) {
+  for (const name of ["Bo", "Cy", "Dee", "Eve", "Flo"].slice(0, count - 1)) {
     const joined = await call(`/rooms/${code}/join`, { method: "POST", body: { name } });
     assert.equal(joined.status, 200);
     seats.push(joined);
     assert.equal(joined.view.players.length, seats.length);
   }
-  assert.equal((await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Eve" } })).status, 409);
+  if (count === 6) {
+    assert.equal((await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Seventh" } })).status, 409);
+    assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "add-bot" } })).status, 409);
+  }
   const watchers = seats.map((seat) => watch(code, seat.token));
   try {
     await until(() => watchers.every((watcher) => watcher.messages.length));
-    assert.ok(watchers.every((watcher) => watcher.messages.at(-1).view.players.length === 4));
+    assert.ok(watchers.every((watcher) => watcher.messages.at(-1).view.players.length === count));
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: seats[1].token,
       body: { type: "start-round" } })).status, 409);
     assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token,
@@ -346,7 +361,7 @@ test("four humans can join, play a full round, and a fifth is refused", async ()
     await until(() => watchers.every((watcher) => watcher.messages.some((message) => message.view.phase === "table")));
     for (const seat of seats) {
       const view = (await call(`/rooms/${code}/state`, { token: seat.token })).view;
-      assert.equal(view.players.length, 4);
+      assert.equal(view.players.length, count);
       assert.deepEqual(view.players.map((player) => player.hand.length),
         seats.map((candidate) => candidate.playerId === seat.playerId ? 5 : 0));
     }
@@ -355,10 +370,10 @@ test("four humans can join, play a full round, and a fifth is refused", async ()
         const result = await call(`/rooms/${code}/command`, { method: "POST", token: seat.token,
           body: { type: "exchange", discardIds: [] } });
         assert.equal(result.status, 200);
-        assert.equal(result.view.exchangeCount, exchange + (index === 3 ? 1 : 0));
+        assert.equal(result.view.exchangeCount, exchange + (index === count - 1 ? 1 : 0));
       }
     }
-    for (let play = 0; play < 20; play++) {
+    for (let play = 0; play < count * 5; play++) {
       const state = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
       const seat = seats.find((candidate) => candidate.playerId === state.activePlayerId);
       assert.ok(seat);
@@ -427,4 +442,68 @@ test("online seats preserve the full 24-character account username", async () =>
     if(guest.token)await call(`/rooms/${code}/leave`,{method:"POST",token:guest.token});
     await call(`/rooms/${code}/leave`,{method:"POST",token:owner.token});
   }
+});
+
+test("Chicago victory requirement defaults ON and chosen ON/OFF survives Worker reload and round start", async () => {
+  for (const chicagoRequiredToWin of [false, true]) {
+    const owner = await call("/rooms", { method: "POST", body: { name: "Rule owner" } });
+    const code = owner.view.roomCode;
+    const guest = await call(`/rooms/${code}/join`, { method: "POST", body: { name: "Rule guest" } });
+    try {
+      assert.equal(owner.view.settings.chicagoRequiredToWin, true);
+      const settings = { ...owner.view.settings, chicagoRequiredToWin };
+      assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: guest.token, body: { type: "set-settings", settings } })).status, 409);
+      assert.equal((await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "set-settings", settings } })).status, 200);
+      const watcher = watch(code, guest.token);
+      try {
+        await until(() => watcher.messages.length);
+        assert.equal(watcher.messages.at(-1).view.settings.chicagoRequiredToWin, chicagoRequiredToWin);
+        const started = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "start-round" } });
+        assert.equal(started.view.settings.chicagoRequiredToWin, chicagoRequiredToWin);
+        assert.equal((await call(`/rooms/${code}/state`, { token: guest.token })).view.settings.chicagoRequiredToWin, chicagoRequiredToWin);
+        await until(() => watcher.messages.at(-1).view.phase === "table");
+        assert.equal(watcher.messages.at(-1).view.settings.chicagoRequiredToWin, chicagoRequiredToWin);
+      } finally { watcher.socket.close(); }
+    } finally {
+      await call(`/rooms/${code}/leave`, { method: "POST", token: guest.token });
+      await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token });
+    }
+  }
+});
+
+test("CPU single-card offers stay public for about five seconds before Worker acceptance", async () => {
+  let observed = false;
+  // Real shuffled rooms: no private Worker-state injection is needed. Repeated
+  // exchanges usually produce two-pair hands, whose CPU strategy discards one.
+  for (let attempt = 0; attempt < 12 && !observed; attempt++) {
+    const owner = await call("/rooms", { method: "POST", body: { name: "Offer observer" } });
+    const code = owner.view.roomCode;
+    try {
+      for (let i = 0; i < 3; i++) await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "add-bot" } });
+      let result = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "start-round" }, settleBots: false });
+      for (let exchange = 0; exchange < 3 && !observed && result.view.tableStage === "exchange"; exchange++) {
+        const began = Date.now();
+        result = await call(`/rooms/${code}/command`, { method: "POST", token: owner.token, body: { type: "exchange", discardIds: [] }, settleBots: false });
+        if (result.view.pendingExchange) {
+          const offer = result.view.pendingExchange;
+          assert.equal(result.view.players.find(p => p.id === offer.playerId).control, "bot");
+          assert.deepEqual(result.view.players.find(p => p.id === offer.playerId).hand, []);
+          assert.equal("discardId" in offer, false);
+          await new Promise(resolve => setTimeout(resolve, 4200));
+          const still = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+          assert.deepEqual(still.pendingExchange, offer);
+          let ended = still;
+          while (ended.pendingExchange?.playerId === offer.playerId && ended.pendingExchange?.card.id === offer.card.id) {
+            assert.ok(Date.now() - began < 7500, "Worker should accept the offer shortly after five seconds");
+            await new Promise(resolve => setTimeout(resolve, 100));
+            ended = (await call(`/rooms/${code}/state`, { token: owner.token })).view;
+          }
+          assert.ok(Date.now() - began >= 4900);
+          assert.equal(ended.exchangeEvents.filter(e => e.playerId === offer.playerId && e.singleCardChoice === "accepted").length, 1);
+          observed = true;
+        }
+      }
+    } finally { await call(`/rooms/${code}/leave`, { method: "POST", token: owner.token }); }
+  }
+  assert.ok(observed, "Expected at least one CPU single-card offer in twelve real rooms");
 });

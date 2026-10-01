@@ -1,6 +1,6 @@
 import { compareHands, evaluateHand, handCategoryName, isRoyalFlush } from "./poker.ts";
 import type { HandEvaluation } from "./poker.ts";
-import { chooseBotDiscards, chooseBotTrickCard } from "./bot.ts";
+import { chooseBotDiscards, chooseBotTrickCard, shouldBotDeclareChicago } from "./bot.ts";
 import { legalCards, trickWinner } from "./tricks.ts";
 import type { PlayedCard } from "./tricks.ts";
 import { canDeclareChicago, canExchangeCards, chicagoBreakPoints, chicagoResult, defaultSettings, finalTrickPoints, matchWinnerId, normalizeSettings, scoreAfter, scoreAfterAward, validSettings } from "./scoring.ts";
@@ -47,13 +47,14 @@ export type TrickAward = { winnerId: string; points: number };
 export type GameSettings = {
   finalTrickPoints: 2 | 5;
   allowNegativeScores: boolean;
+  chicagoRequiredToWin: boolean;
   firstChicagoBreakBonus: boolean;
   resetOver52WithoutChicago: boolean;
 };
 export type ChicagoAward = { playerId: string; points: 15 | -15 };
 export type ExchangeFeedback = { exchangeCount: 1 | 2 | 3; changedCards: number };
 export type ExchangeEvent = { id: number; exchangeCount: 1 | 2 | 3; playerId: string; changedCards: number; singleCardChoice?: "accepted" | "rejected" };
-export type PendingExchange = { playerId: string; discardId: string; card: Card };
+export type PendingExchange = { playerId: string; discardId: string; card: Card; revealUntil?: number };
 export type GameState = {
   roomCode: string;
   // Optional for rooms saved by older Workers. Added on their next deal.
@@ -90,6 +91,33 @@ export type GameState = {
   waitingForNextTrick: boolean;
   trickError: string | null;
 };
+
+export const CPU_NAMES = ["Terra", "Luna", "Astra"] as const;
+export const CPU_REVEAL_MS = 5000;
+export function roomCapacity(game: { players: readonly { control: "human" | "bot" }[] }): number {
+  return game.players.some(player => player.control === "bot") ? 4 : 6;
+}
+
+function declareChicago(game: GameState, playerId: string): GameState {
+  if (!canPlayerDeclareChicago(game, playerId)) return game;
+  return { ...game, chicagoPlayerId: playerId, activePlayerId: playerId,
+    selectedCardIds: [], trickError: null };
+}
+
+/** Evaluate all seats before the first card, including CPUs who are off-turn.
+ * The normal declaration helper resolves competing claims by seat priority. */
+export function declareBotChicago(game: GameState): GameState {
+  let next = game;
+  for (const player of game.players) {
+    if (player.control === "bot" && canPlayerDeclareChicago(next, player.id) &&
+      shouldBotDeclareChicago(player.hand, player.score, player.hasDeclaredChicago,
+        game.players.filter(other => other.id !== player.id).map(other => ({
+          score: other.score, hasDeclaredChicago: other.hasDeclaredChicago })),
+        game.settings.chicagoRequiredToWin ?? true))
+      next = declareChicago(next, player.id);
+  }
+  return next;
+}
 
 /** Chicago stays open until the first card; a higher-priority claimant may take over. */
 export function canPlayerDeclareChicago(
@@ -194,11 +222,8 @@ export function addDemoPlayer(game: GameState): GameState {
   if (game.phase !== "lobby" || game.players.length >= 4) return game;
   let botNumber = 1;
   while (game.players.some((player) => player.id === `demo-${botNumber}`)) botNumber++;
-  const names = ["Alex", "Sam", "Kim"];
-  const used = new Set(game.players.map((player) => player.name.toLowerCase()));
-  const name =
-    names.find((candidate) => !used.has(candidate.toLowerCase())) ??
-    `Spelare ${game.players.length + 1}`;
+  const name = CPU_NAMES[botNumber - 1];
+  if (!name) return game;
   return {
     ...game,
     players: [
@@ -216,7 +241,7 @@ export function addDemoPlayer(game: GameState): GameState {
 }
 
 export function startRound(game: GameState): GameState {
-  if (game.players.length < 2 || digitalMatchWinnerId(game) ||
+  if (game.players.length < 2 || game.players.length > roomCapacity(game) || digitalMatchWinnerId(game) ||
     (game.phase !== "lobby" && game.tableStage !== "result")) return game;
   const deck = shuffled(createDeck());
   const players = game.players.map((player) => ({
@@ -409,7 +434,8 @@ function submitExchange(game: GameState, playerId: string, discardedIds: readonl
     const deck = game.deck.length >= 2 ? game.deck : [...game.deck, ...shuffled(game.discard)];
     if (deck.length < 2) return game;
     return { ...game, deck, discard: game.deck.length >= 2 ? game.discard : [],
-      pendingExchange: { playerId, discardId: discardedIds[0], card: deck[0] },
+      pendingExchange: { playerId, discardId: discardedIds[0], card: deck[0],
+        ...(player.control === "bot" ? { revealUntil: Date.now() + CPU_REVEAL_MS } : {}) },
       selectedCardIds: [] };
   }
   const exchanged = exchangePlayerCards(game, playerId, discardedIds);
@@ -470,16 +496,10 @@ function submitAcceptedSingle(game: GameState, playerId: string, discardId: stri
 
 function runExchangeBots(game: GameState): GameState {
   let next = game;
-  // At most 12 player exchanges, each with up to one additional offer answer.
+  // At most three exchanges for each of six seats.
   for (let turn = 0; turn < 24 && next.tableStage === "exchange"; turn++) {
-    if (next.pendingExchange) {
-      const waiting = next.players.find((player) => player.id === next.pendingExchange?.playerId);
-      if (waiting?.control !== "bot") break;
-      const answered = answerExchange(next, waiting.id, true);
-      if (answered === next) break;
-      next = answered;
-      continue;
-    }
+    // Publish the public offer before accepting it on the timed authority path.
+    if (next.pendingExchange) break;
     const player = next.players.find((candidate) => candidate.id === next.activePlayerId);
     // A locked seat never waits for input, even when other players may exchange.
     if (!player || (player.control !== "bot" && canExchangeCards(player.score))) break;
@@ -487,7 +507,7 @@ function runExchangeBots(game: GameState): GameState {
     if (advanced === next) break;
     next = advanced;
   }
-  return next;
+  return declareBotChicago(next);
 }
 
 export function exchangeSelectedCards(game: GameState): GameState {
@@ -636,6 +656,7 @@ function runDemoTurns(game: GameState): GameState {
 
 export function playNextDemoTrickCard(game: GameState): GameState {
   if (game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick) return game;
+  game = declareBotChicago(game);
   const player = game.players.find((candidate) => candidate.id === game.activePlayerId);
   if (!player || player.control !== "bot") return game;
   const card = chooseBotTrickCard(player.hand, game.currentTrick[0]?.card.suit ?? null);
@@ -711,12 +732,9 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
           ...player, score: scoreAfter(player.score, 0, command.settings),
         })) };
     case "declare-chicago":
-      if (!canPlayerDeclareChicago(game, actor.id)) return game;
-      // Keep roundStarterId unchanged: it anchors priority and next-round rotation.
-      return { ...game, chicagoPlayerId: actor.id, activePlayerId: actor.id,
-        selectedCardIds: [], trickError: null };
+      return declareChicago(game, actor.id);
     case "add-human":
-      if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= 4 ||
+      if (command.actorId !== game.ownerId || game.phase !== "lobby" || game.players.length >= roomCapacity(game) ||
         typeof command.playerId !== "string" || !command.playerId || typeof command.name !== "string" ||
         !command.name.trim() || game.players.some((p) => p.id === command.playerId)) return game;
       return { ...game, players: [...game.players, { id: command.playerId, name: command.name.trim(), control: "human", score: 0, hasDeclaredChicago: false, hand: [] }] };
@@ -757,7 +775,8 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
     case "advance-bot":
       if (command.actorId !== game.ownerId) return game;
       if (game.pendingExchange && game.players.find((p) => p.id === game.pendingExchange?.playerId)?.control === "bot")
-        return runExchangeBots(answerExchange(game, game.pendingExchange.playerId, true));
+        return Date.now() < (game.pendingExchange.revealUntil ?? 0) ? game
+          : runExchangeBots(answerExchange(game, game.pendingExchange.playerId, true));
       return playNextDemoTrickCard(game);
     case "continue-trick":
       return command.actorId === game.ownerId ? continueAfterTrickOnce(game) : game;

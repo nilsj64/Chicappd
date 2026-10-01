@@ -33,6 +33,7 @@ const S = "spades",
 function settleOffers(game) {
   for (let i = 0; i < 12 && game.pendingExchange; i++) {
     const pending = game.pendingExchange;
+    game = { ...game, pendingExchange: { ...pending, revealUntil: 0 } };
     game = pending.playerId === game.ownerId
       ? applyCommand(game, { type: "exchange-choice", actorId: pending.playerId, accept: true })
       : applyCommand(game, { type: "advance-bot", actorId: game.ownerId });
@@ -178,7 +179,7 @@ function readyGame() {
   const room = createRoom("Du", "ABCDE", "local");
   room.players.push({
     id: "demo",
-    name: "Alex",
+    name: "Terra",
     control: "bot",
     score: 0,
     hand: [],
@@ -453,7 +454,7 @@ test("four players exchange directly and score only after exchanges 1 and 2", ()
     assert.equal(ids.length, 52);
     assert.equal(new Set(ids).size, 52);
     assert.equal(game.handAwards.length, Math.min(round + 1, 2));
-    assert.ok(game.activity.some((message) => message.startsWith("Byte 1: Alex ")));
+    assert.ok(game.activity.some((message) => message.startsWith("Byte 1: Terra ")));
   }
   assert.ok(game.finalHands);
   assert.equal(game.tableStage, "tricks");

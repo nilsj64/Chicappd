@@ -21,7 +21,7 @@ export function validIRLGame(value: unknown): value is IRLGame {
   if (!value || typeof value !== "object") return false;
   const game = value as IRLGame;
   const snapshotValid = (snapshot: Omit<IRLGame, "history">) => !!snapshot &&
-    Array.isArray(snapshot.players) && snapshot.players.length >= 2 && snapshot.players.length <= 4 &&
+    Array.isArray(snapshot.players) && snapshot.players.length >= 2 && snapshot.players.length <= 6 &&
     snapshot.players.every((p) => p && typeof p.id === "string" && typeof p.name === "string" && Number.isSafeInteger(p.score) && typeof p.hasDeclaredChicago === "boolean") &&
     validSettings(snapshot.settings) && Number.isSafeInteger(snapshot.dealNumber) && snapshot.dealNumber >= 1 &&
     ["hands", "tricks", "result"].includes(snapshot.phase) &&

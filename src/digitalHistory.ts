@@ -43,7 +43,7 @@ export function digitalResult(view: GameView, source: DigitalHistory["source"], 
 export function validDigitalHistory(value: unknown): value is DigitalHistory {
   const g = value as DigitalHistory | null;
   return !!g && g.kind === "digital" && g.phase === "result" && ["local", "online"].includes(g.source) &&
-    Array.isArray(g.players) && g.players.length >= 2 && g.players.length <= 4 &&
+    Array.isArray(g.players) && g.players.length >= 2 && g.players.length <= 6 &&
     g.players.every(p => p && typeof p.id === "string" && typeof p.name === "string" && Number.isSafeInteger(p.score) && typeof p.hasDeclaredChicago === "boolean") &&
     (g.playerId === undefined || g.players?.some(p => p.id === g.playerId)) &&
     (g.matchId === undefined || (typeof g.matchId === "string" && Number.isSafeInteger(g.dealNumber) && g.dealNumber! > 0)) &&

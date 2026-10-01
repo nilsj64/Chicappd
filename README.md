@@ -1,8 +1,8 @@
 # Chicappd
 
-Chicappd is a two-to-four-player online card game with a static React/Vite frontend on GitHub Pages and a Cloudflare Worker with one Durable Object per room. The Worker holds the only full game state. Each client receives a player-specific view and sends commands that the Worker validates in order. WebSockets update all clients automatically. A room code admits additional players; an unguessable temporary token identifies each seat and is saved in that browser for reloads. No account is required.
+Chicappd is a two-to-six-player online card game with a static React/Vite frontend on GitHub Pages and a Cloudflare Worker with one Durable Object per room. The Worker holds the only full game state. Each client receives a player-specific view and sends commands that the Worker validates in order. WebSockets update all clients automatically. A room code admits additional players; an unguessable temporary token identifies each seat and is saved in that browser for reloads. No account is required.
 
-Rooms support two to four players in any mix of humans and CPU players. The room owner can add or remove CPU players in the lobby; a single human can start with CPU opponents. When no multiplayer API is configured, creating a room uses the same game model locally with CPU players.
+Human-only rooms support two to six players. Chicago is required to win by default; the lobby rule can turn this requirement off without disabling Chicago gameplay. Older saved rooms keep the requirement. Rooms containing CPUs support two to four players; the available CPUs are Terra, Luna and Astra. The room owner can add or remove CPU players in the lobby; a single human can start with CPU opponents. When no multiplayer API is configured, creating a room uses the same game model locally with CPU players.
 
 ## Local development
 

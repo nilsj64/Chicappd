@@ -134,3 +134,54 @@ test("Swedish history UI distinguishes local saves, pending account saves, refre
     assert.match(html,expected);assert.doesNotMatch(html,/kontotjänst|kontoärende|synka/);
   }
 });
+
+test("six-human lobby and scoreboard localize Chicago rule ON/OFF without empty indicator columns", () => {
+  let room = createRoom("Ada", "TEST1", "ada");
+  for(let i=1;i<6;i++) room=applyCommand(room,{type:"add-human",actorId:"ada",playerId:`h${i}`,name:`Human ${i}`});
+  const lobbyProps={viewerId:"ada",online:true,onRemoveBot:noop,onAddBot:noop,onSettings:noop,onStart:noop,onLeave:noop};
+  const props={viewerId:"ada",online:true,selectedCardIds:[],exchangeBusy:false,actionBusy:false,visibleDiscard:0,flight:null,reviewedTrickCount:5,
+    ...Object.fromEntries(["onToggle","onExchange","onKeep","onExchangeChoice","onPlayTrickCard","onDeclareChicago","onCardLanded","onNextRound","onLobby","onLeave"].map(k=>[k,noop]))};
+  for(const language of ["sv","en"]) for(const required of [true,false]) {
+    room={...room,settings:{...room.settings,chicagoRequiredToWin:required}};
+    const lobby=render(language,React.createElement(Lobby,{...lobbyProps,game:viewForPlayer(room,"ada")}));
+    assert.match(lobby,language==="sv"?/AV 6 PLATSER/:/OF 6 SEATS/);
+    assert.equal((lobby.match(/class="lobby-seat seat-filled"/g)||[]).length,6);
+    assert.match(lobby,language==="sv"?/Chicago krävs för vinst/:/Chicago required to win/);
+    const game=startRound(room);
+    const html=render(language,React.createElement(Table,{...props,game:viewForPlayer(game,"ada")}));
+    assert.equal((html.match(/class="chicago-check/g)||[]).length,required?6:0);
+    if(required) assert.match(html,language==="sv"?/Du måste ha sagt Chicago minst en gång för att vinna/:/You must have declared Chicago at least once to win/);
+    else assert.doesNotMatch(html,/chicago-check|✓ =|You must have declared Chicago|Du måste ha sagt Chicago/);
+    assert.match(html,language==="sv"?/Royal Flush ger omedelbar vinst/:/Royal Flush wins immediately/);
+    assert.doesNotMatch(html,/sidebar-bottom|Spela tillsammans\.|Play together\./);
+    assert.match(html,/felt-many/);
+  }
+});
+
+test("CPU public offer renders its name and exactly one offered card in either language", () => {
+  const room=addDemoPlayer(createRoom("Ada","TEST1","ada"));
+  const game=startRound(room);
+  game.pendingExchange={playerId:game.players[1].id,discardId:game.players[1].hand[0].id,card:game.deck[0],revealUntil:Date.now()+5000};
+  const props={viewerId:"ada",online:false,selectedCardIds:[],exchangeBusy:false,actionBusy:false,visibleDiscard:0,flight:null,reviewedTrickCount:0,
+    ...Object.fromEntries(["onToggle","onExchange","onKeep","onExchangeChoice","onPlayTrickCard","onDeclareChicago","onCardLanded","onNextRound","onLobby","onLeave"].map(k=>[k,noop]))};
+  for(const language of ["sv","en"]) {
+    const html=render(language,React.createElement(Table,{...props,game:viewForPlayer(game,"ada")}));
+    assert.match(html,language==="sv"?/Terra\s+byter ett kort/:/Terra\s+is exchanging one card/);
+    assert.match(html,/class="exchange-offer"/);
+    assert.equal((html.match(/class="playing-card /g)||[]).length,6); // five own cards + public offer
+    assert.doesNotMatch(html,/exchange-offer-actions/);
+  }
+});
+
+test("physical setup and six-human scoreboard respect the optional Chicago requirement", () => {
+  for(const language of ["sv","en"]) {
+    const props={onExit:noop,onDigital:noop};
+    const setup=render(language,React.createElement(Physical,props));
+    assert.match(setup,language==="sv"?/Chicago krävs för vinst/:/Chicago required to win/);
+    const storage=disk();
+    storage.setItem("chicappd-irl-game",JSON.stringify(createIRLGame(["Ada","Bo","Cy","Dee","Eve","Flo"],{...defaultSettings,chicagoRequiredToWin:false})));
+    const html=render(language,React.createElement(Physical,props),storage);
+    assert.doesNotMatch(html,/chicago-check|Du måste ha sagt Chicago|You must have declared Chicago/);
+    assert.match(html,language==="sv"?/Över 52 poäng krävs för vinst/:/More than 52 points are needed to win/);
+  }
+});

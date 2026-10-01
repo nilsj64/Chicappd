@@ -5,6 +5,8 @@ import { evaluateHand, handCategoryName, pokerHandName } from "./poker";
 import type { Card, ExchangeEvent, GameSettings, GameState, GameView, PlayerView } from "./game";
 import {
   applyCommand,
+  roomCapacity,
+  CPU_REVEAL_MS,
   digitalMatchWinnerId,
   canPlayerDeclareChicago,
   createRoom,
@@ -175,7 +177,7 @@ function Landing({ onEnter, onPhysical, onHistory }: { onEnter: (mode: EntryMode
           </div>
           <div className="hero-footnote">
             <span className="footnote-icon"><BrandMark /></span> {API_URL
-              ? t("Onlinerum för upp till fyra spelare") : t("Spela lokalt med upp till tre CPU-spelare")}
+              ? t("Onlinerum för upp till sex mänskliga spelare") : t("Spela lokalt med upp till tre CPU-spelare")}
           </div>
           <nav className="landing-history" aria-label={t("Poäng och historik")}>
             <span className="form-kicker">{t("POÄNG OCH HISTORIK")}</span>
@@ -375,6 +377,7 @@ function Lobby({
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const capacity = online ? roomCapacity(game) : 4;
   const matchWinner = digitalMatchWinnerId(game);
   async function copyCode() {
     try {
@@ -407,10 +410,10 @@ function Lobby({
           <section className="lobby-panel">
             <div className="panel-topline">
               <span>{t("SPELARE")}</span>
-              <span>{game.players.length} {" "}{t("AV 4 PLATSER")}</span>
+              <span>{game.players.length} {" "}{t("AV {0} PLATSER", [capacity])}</span>
             </div>
             <div className="seats-grid">
-              {Array.from({ length: 4 }, (_, index) => (
+              {Array.from({ length: capacity }, (_, index) => (
                 <Seat key={index} player={game.players[index]} index={index} viewerId={viewerId}
                   onRemoveBot={game.ownerId === viewerId ? onRemoveBot : undefined} />
               ))}
@@ -449,6 +452,11 @@ function Lobby({
                   <option value={5}>{t("5 poäng")}</option><option value={2}>{t("2 poäng")}</option>
                 </select>
               </label>
+              <label>{t("Chicago krävs för vinst")}<select value={(game.settings.chicagoRequiredToWin ?? true) ? "yes" : "no"} disabled={game.ownerId !== viewerId}
+                  onChange={(event) => onSettings({ ...game.settings, chicagoRequiredToWin: event.target.value === "yes" })}>
+                  <option value="yes">{t("På")}</option><option value="no">{t("Av")}</option>
+                </select>
+              </label>
               <label>{t("Minuspoäng")}<select value={game.settings.allowNegativeScores ? "yes" : "no"} disabled={game.ownerId !== viewerId}
                   onChange={(event) => onSettings({ ...game.settings, allowNegativeScores: event.target.value === "yes" })}>
                   <option value="no">{t("Tillåt inte minuspoäng")}</option><option value="yes">{t("Tillåt minuspoäng")}</option>
@@ -468,7 +476,7 @@ function Lobby({
             <button
               className="button button-primary start-button"
               onClick={onStart}
-              disabled={game.players.length < 2 || game.ownerId !== viewerId || !!matchWinner}
+              disabled={game.players.length < 2 || game.players.length > capacity || game.ownerId !== viewerId || !!matchWinner}
             >
               {t("Börja spela")}{" "}<Icon name="arrow-right" />
             </button>
@@ -682,17 +690,17 @@ function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; vi
               {player.name}
               {player.id === viewerId && <small>{t("DU")}</small>}
             </span>
-            <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`}
+            {(settings.chicagoRequiredToWin ?? true) && <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`}
               role="img" aria-label={player.hasDeclaredChicago ? t("{0} har sagt Chicago", [player.name]) : t("{0} har inte sagt Chicago", [player.name])}
               title={player.hasDeclaredChicago ? t("Har sagt Chicago") : t("Har inte sagt Chicago")}>
               {player.hasDeclaredChicago ? "✓" : ""}
-            </span>
+            </span>}
             <strong>{player.score}</strong>
           </div>
         ))}
       </div>
       <div className="score-foot">
-        {t("✓ = har sagt Chicago ·")}{" "}{t("Över 52 poäng krävs för vinst (minst 53).")} {t("Royal Flush ger omedelbar vinst oavsett poäng.")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
+        {(settings.chicagoRequiredToWin ?? true) && <>{t("✓ = har sagt Chicago ·")}{" "}{t("Du måste ha sagt Chicago minst en gång för att vinna.")}{" "}</>}{t("Över 52 poäng krävs för vinst (minst 53).")} {t("Royal Flush ger omedelbar vinst oavsett poäng.")} {" "}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}{settings.resetOver52WithoutChicago && t(" Över 52 utan Chicago nollställer poängen.")}
       </div>
     </aside>
   );
@@ -873,7 +881,7 @@ function Table({
       </header>
       <main className="table-layout">
         <section className="felt-wrap">
-          <div className={`felt ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
+          <div className={`felt ${game.players.length > 4 ? "felt-many" : ""} ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
             <MonkeyDealer key={game.roundStarterId} exchange={exchangePlayback}
               initialDeal={exchanging || (playingTricks && !game.currentTrick.length && !game.completedTricks.length)}
@@ -896,7 +904,7 @@ function Table({
                   active={game.activePlayerId === player.id}
                   position={opponents.length === 1 ? "top" : opponents.length === 2
                     ? index === 0 ? "left" : "right"
-                    : ["left", "top", "right"][index] as "left" | "top" | "right"}
+                    : ["left", "top", "right"][index % 3] as "left" | "top" | "right"}
                   playedCards={playedCardsForPlayer(game, player.id)}
                   showPlayedCards={!exchanging && !showResult}
                   currentCardIds={currentCardIds}
@@ -1066,9 +1074,6 @@ function Table({
               <Icon name="arrow-left" /> <span>{t("Till väntrummet")}</span>
             </button>
           </div>
-          <div className="sidebar-bottom">
-            {t("Spela tillsammans.")}{" "}<span><Icon name="heart" /></span>
-          </div>
         </aside>
       </main>
     </div>
@@ -1200,7 +1205,7 @@ export default function App() {
     if (online || !game?.pendingExchange ||
       game.players.find((player) => player.id === game.pendingExchange?.playerId)?.control !== "bot") return;
     const timer = window.setTimeout(() => setGame((current) => current
-      ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), BOT_PAUSE_MS);
+      ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), Math.max(1, (game.pendingExchange.revealUntil ?? Date.now() + CPU_REVEAL_MS) - Date.now() + 20));
     return () => window.clearTimeout(timer);
   }, [game?.pendingExchange, online]);
 

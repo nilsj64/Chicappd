@@ -46,7 +46,7 @@ function validHand(game: IRLGame, hand: HandResult): boolean {
 
 export function createIRLGame(names: string[], settings: GameSettings): IRLGame | null {
   const trimmed = names.map((name) => name.trim());
-  if (trimmed.length < 2 || trimmed.length > 4 || trimmed.some((name) => !name || name.length > 20) ||
+  if (trimmed.length < 2 || trimmed.length > 6 || trimmed.some((name) => !name || name.length > 20) ||
     new Set(trimmed.map((name) => name.toLocaleLowerCase())).size !== trimmed.length ||
     !validSettings(settings)) return null;
   return { players: trimmed.map((name, index) => ({ id: `irl-${index + 1}`, name, score: 0, hasDeclaredChicago: false })),

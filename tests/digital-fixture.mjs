@@ -4,7 +4,10 @@ import { legalCards } from "../src/tricks.ts";
 export function finishedDigitalRound(code = "TEST1") {
   let game = startRound(addDemoPlayer(createRoom("Digitaltest", code)));
   for (let steps = 0; steps < 300 && game.tableStage !== "result"; steps++) {
-    if (game.tableStage === "exchange") {
+    if (game.pendingExchange) {
+      game = { ...game, pendingExchange: { ...game.pendingExchange, revealUntil: 0 } };
+      game = applyCommand(game, { type: "advance-bot", actorId: game.ownerId });
+    } else if (game.tableStage === "exchange") {
       game = applyCommand(game, { type: "exchange", actorId: game.ownerId, discardIds: [] });
     } else if (game.waitingForNextTrick) {
       game = applyCommand(game, { type: "continue-trick", actorId: game.ownerId });

@@ -25,6 +25,10 @@ function RuleSettings({ settings, onChange }: { settings: GameSettings; onChange
         <option value={5}>{t("5 poäng")}</option><option value={2}>{t("2 poäng")}</option>
       </select>
     </label>
+    <label>{t("Chicago krävs för vinst")}<select value={(settings.chicagoRequiredToWin ?? true) ? "yes" : "no"} onChange={(event) => onChange({ ...settings, chicagoRequiredToWin: event.target.value === "yes" })}>
+        <option value="yes">{t("På")}</option><option value="no">{t("Av")}</option>
+      </select>
+    </label>
     <label>{t("Minuspoäng")}<select value={settings.allowNegativeScores ? "yes" : "no"} onChange={(event) => onChange({ ...settings, allowNegativeScores: event.target.value === "yes" })}>
         <option value="no">{t("Tillåt inte minuspoäng")}</option><option value="yes">{t("Tillåt minuspoäng")}</option>
       </select>
@@ -84,7 +88,7 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
 
   function startMatch() {
     const created = createIRLGame(names, settings);
-    if (!created) { setSetupError("Ange 2–4 olika spelarnamn, högst 20 tecken vardera."); return; }
+    if (!created) { setSetupError("Ange 2–6 olika spelarnamn, högst 20 tecken vardera."); return; }
     setGame(created);
     setSetupError("");
   }
@@ -139,7 +143,7 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
             setNames((current) => current.map((item, position) => position === index ? event.target.value : item))} />
         </label>)}</div>
         <div className="irl-inline-actions">
-          <button type="button" onClick={() => setNames((current) => [...current, ""])} disabled={names.length >= 4}><Icon name="plus" /> {" "}{t("Lägg till spelare")}</button>
+          <button type="button" onClick={() => setNames((current) => [...current, ""])} disabled={names.length >= 6}><Icon name="plus" /> {" "}{t("Lägg till spelare")}</button>
           <button type="button" onClick={() => setNames((current) => current.slice(0, -1))} disabled={names.length <= 2}>{t("Ta bort sista")}</button>
         </div>
         <h2>{t("Regler")}</h2>
@@ -186,9 +190,9 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
       </section>
       <aside className="irl-side"><div className="irl-scoreboard"><span>{t("POÄNGSTÄLLNING")}</span>
         {game.players.map((player, index) => <div className="irl-score-row" key={player.id}><span>{index + 1}. {player.name}</span>
-          <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`} role="img"
+          {(game.settings.chicagoRequiredToWin ?? true) && <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`} role="img"
             aria-label={player.hasDeclaredChicago ? t("{0} har sagt Chicago", [player.name]) : t("{0} har inte sagt Chicago", [player.name])}
-            title={player.hasDeclaredChicago ? t("Har sagt Chicago") : t("Har inte sagt Chicago")}>{player.hasDeclaredChicago ? "✓" : ""}</span>
+            title={player.hasDeclaredChicago ? t("Har sagt Chicago") : t("Har inte sagt Chicago")}>{player.hasDeclaredChicago ? "✓" : ""}</span>}
           <strong>{player.score}</strong></div>)}
       </div><div className="irl-tools"><button type="button" onClick={() => setGame(undoIRL(game))} disabled={!game.history.length}><Icon name="undo" /> {" "}{t("Ångra senaste ändring")}</button>
         <button type="button" onClick={() => { setCorrectionId(correctionId ? null : game.players[0].id); setCorrectionReady(false); }}>{t("Korrigera poäng")}</button>
@@ -206,7 +210,7 @@ function IRLMatch({ onExit, onDigital }: { onExit: () => void; onDigital: () => 
         }}>{newMatchReady ? t("Bekräfta ny match (nollställ)") : t("Starta ny match")}</button>
         {newMatchReady && <button type="button" onClick={() => setNewMatchReady(false)}>{t("Avbryt")}</button>}
       </div><div className="irl-rules"><strong>{t("REGLER")}</strong><p>{t("Bästa handen ger 1–8 poäng efter byte 1, byte 2 och vid givens slut. Sista sticket ger")}{" "}{finalTrickPoints(game.settings)} {" "}{t("poäng.")}</p>
-        <p>{t("Över 52 poäng (minst 53)")} {" "}{t("vinner efter att spelaren minst en gång har sagt Chicago. Från 46 poäng får spelaren inte byta kort.")}</p>
+        <p>{t("Över 52 poäng krävs för vinst (minst 53).")} {" "}{(game.settings.chicagoRequiredToWin ?? true) && <>{t("Du måste ha sagt Chicago minst en gång för att vinna.")}{" "}</>}{t("Från 46 poäng är kortbyte spärrat. Sista sticket ger också poäng.")}</p>
         {game.settings.resetOver52WithoutChicago && <p>{t("Över 52 poäng utan att ha sagt Chicago nollställer totalpoängen till 0 efter poängutdelning.")}</p>}
         <p>{t("Chicago kräver minst 15 poäng och ger +15 vid alla stick, annars −15.")}</p>
         {game.settings.firstChicagoBreakBonus && <p>{t("Första som bryter Chicago får 10 poäng")}{" · "}{t("En gång per spel.")}</p>}

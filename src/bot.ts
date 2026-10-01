@@ -35,3 +35,20 @@ export function chooseBotTrickCard(hand: readonly Card[], ledSuit: Suit | null):
     cardValue(card) < cardValue(lowest) ? card : lowest,
   );
 }
+
+/** Only the CPU's hand and public scores enter this decision. Count suit runs
+ * from the ace down: these cards can keep the lead without guessing holdings.
+ * Late in a match, four likely winners plus a high fifth card justify a risk. */
+export function shouldBotDeclareChicago(hand: readonly Card[], score: number,
+  hasDeclaredChicago: boolean, opponents: readonly { score: number; hasDeclaredChicago: boolean }[], chicagoRequiredToWin = true): boolean {
+  if (hand.length !== 5) return false;
+  let winners = 0;
+  for (const suit of ["spades", "hearts", "diamonds", "clubs"] as const) {
+    const values = new Set(hand.filter(card => card.suit === suit).map(cardValue));
+    for (let value = 14; values.has(value); value--) winners++;
+  }
+  if (winners === 5) return true;
+  const worthwhile = score >= 38 || (chicagoRequiredToWin && !hasDeclaredChicago && score >= 30) ||
+    opponents.some(player => (!chicagoRequiredToWin || player.hasDeclaredChicago) && player.score >= 46);
+  return worthwhile && winners >= 4 && hand.every(card => cardValue(card) >= 10);
+}

@@ -65,3 +65,36 @@ for (const firstChicagoBreakBonus of [false, true]) {
     });
   }
 }
+
+test("Chicago victory requirement defaults ON, persists OFF and rejects invalid values", () => {
+  assert.equal(defaultSettings.chicagoRequiredToWin, true);
+  assert.equal(normalizeSettings({ finalTrickPoints: 5, allowNegativeScores: false }).chicagoRequiredToWin, true);
+  let room = applyCommand(createRoom("Ada", "ABCDE", "ada"), { type: "add-human", actorId: "ada", playerId: "bea", name: "Bea" });
+  assert.strictEqual(applyCommand(room, { type: "set-settings", actorId: "ada", settings: { ...defaultSettings, chicagoRequiredToWin: "no" } }), room);
+  const off = { ...defaultSettings, chicagoRequiredToWin: false };
+  room = applyCommand(room, { type: "set-settings", actorId: "ada", settings: off });
+  room = JSON.parse(JSON.stringify(startRound(room)));
+  assert.equal(room.settings.chicagoRequiredToWin, false);
+  assert.equal(viewForPlayer(room, "bea").settings.chicagoRequiredToWin, false);
+  for (const required of [true, false]) for (const declared of [true, false]) for (const score of [52, 53]) {
+    assert.equal(matchWinnerId([{ id: "ada", score, hasDeclaredChicago: declared }], { ...off, chicagoRequiredToWin: required }),
+      score > 52 && (!required || declared) ? "ada" : null);
+  }
+  assert.equal(matchWinnerId([{ id: "ada", score: 53 }, { id: "bea", score: 53 }], off), null);
+  assert.equal(matchWinnerId([{ id: "ada", score: 53 }]), null);
+  let physical = createIRLGame(["Ada", "Bea"], off);
+  physical = recordFirstHands(physical, [null, null]);
+  physical = correctIRLScore(physical, "irl-1", 50);
+  physical = finishIRLDeal(physical, { finalHand: null, finalTrickWinnerId: "irl-1" });
+  assert.equal(matchWinnerId(physical.players, physical.settings), "irl-1");
+  assert.strictEqual(nextIRLDeal(physical), physical);
+  assert.equal(JSON.parse(JSON.stringify(physical)).settings.chicagoRequiredToWin, false);
+});
+
+test("game start uses persisted Chicago requirement rather than UI or declaration history", () => {
+  let room = applyCommand(createRoom("Ada", "ABCDE", "ada"), { type: "add-human", actorId: "ada", playerId: "bea", name: "Bea" });
+  room = { ...room, players: room.players.map(p => p.id === "ada" ? { ...p, score: 53 } : p) };
+  const off = { ...room, settings: { ...room.settings, chicagoRequiredToWin: false } };
+  assert.strictEqual(startRound(off), off);
+  assert.equal(startRound(room).phase, "table");
+});

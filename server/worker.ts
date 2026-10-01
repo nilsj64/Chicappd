@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { applyCommand, createRoom, randomRoomCode, viewForPlayer } from "../src/game.ts";
+import { applyCommand, createRoom, randomRoomCode, viewForPlayer, roomCapacity } from "../src/game.ts";
 import type { GameCommand, GameSettings, GameState } from "../src/game.ts";
 
 type Env = { ROOMS: DurableObjectNamespace<GameRoom>; FRONTEND_ORIGIN: string };
@@ -71,7 +71,7 @@ export class GameRoom extends DurableObject<Env> {
     if (path === "/join" && request.method === "POST") {
       const name = (body as { name?: unknown } | null)?.name;
       if (!validName(name)) return json({ error: "Ange ett namn med högst 24 tecken." }, 400);
-      if (saved.game.phase !== "lobby" || saved.game.players.length >= 4)
+      if (saved.game.phase !== "lobby" || saved.game.players.length >= roomCapacity(saved.game))
         return json({ error: "Rummet är fullt eller spelet har startat." }, 409);
       const playerId = crypto.randomUUID();
       const next = applyCommand(saved.game, {
@@ -138,7 +138,8 @@ export class GameRoom extends DurableObject<Env> {
       saved = { ...saved, game: next };
       if (this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
         next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
-        await this.ctx.storage.setAlarm(Date.now() + (this.openingChicagoWindow(next) ? 5000 : 1300));
+        await this.ctx.storage.setAlarm(next.pendingExchange?.revealUntil ??
+          Date.now() + (this.openingChicagoWindow(next) ? 5000 : 1300));
       await this.persist(saved);
       return json({ view: this.view(saved, session.playerId) });
     }
@@ -152,7 +153,8 @@ export class GameRoom extends DurableObject<Env> {
     }), true);
     if (this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
       next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
-      await this.ctx.storage.setAlarm(Date.now() + (this.openingChicagoWindow(next) ? 5000 : 1300));
+      await this.ctx.storage.setAlarm(next.pendingExchange?.revealUntil ??
+          Date.now() + (this.openingChicagoWindow(next) ? 5000 : 1300));
     if (next !== saved.game) await this.persist({ ...saved, game: next });
   }
 }

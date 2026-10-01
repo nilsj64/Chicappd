@@ -10,7 +10,7 @@ const S = "spades", H = "hearts", D = "diamonds", C = "clubs";
 
 function gameWithHand(cards) {
   const room = createRoom("Du", "ABCDE", "local");
-  room.players.push({ id: "other", name: "Alex", control: "bot", score: 0, hand: [] });
+  room.players.push({ id: "other", name: "Terra", control: "bot", score: 0, hand: [] });
   const game = startRound(room);
   game.players[0].hand = cards;
   return game;
@@ -57,7 +57,7 @@ test("trick advice changes with the lead and recommends only legal cards", () =>
 
 test("a possible winner is described as uncertain while another player remains", () => {
   const game = gameWithHand(hand(["A", S], ["3", S], ["9", H], ["5", D], ["K", C]));
-  game.players.push({ id: "third", name: "Sam", control: "bot", score: 0, hand: [] });
+  game.players.push({ id: "third", name: "Luna", control: "bot", score: 0, hand: [] });
   game.tableStage = "tricks";
   game.activePlayerId = "local";
   game.completedTricks = Array.from({ length: 4 }, () => ({ cards: [], winnerId: "other" }));

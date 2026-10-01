@@ -10,8 +10,10 @@ function humanRoom() {
 }
 
 function settleBotOffers(game) {
-  for (let i = 0; i < 12 && game.pendingExchange; i++)
+  for (let i = 0; i < 12 && game.pendingExchange; i++) {
+    game = { ...game, pendingExchange: { ...game.pendingExchange, revealUntil: 0 } };
     game = applyCommand(game, { type: "advance-bot", actorId: game.ownerId });
+  }
   return game;
 }
 

@@ -107,3 +107,16 @@ for (const enabled of [false, true]) {
     assert.equal(createIRLGame(players, settings).chicagoBreakBonusAwarded, false);
   });
 }
+
+test("six human physical players can score and preserve history; seven are refused", async () => {
+  const { validIRLGame } = await import("../src/history.ts");
+  const names = ["Ada", "Bo", "Cy", "Dee", "Eve", "Flo"];
+  let game = createIRLGame(names, settings);
+  assert.equal(game.players.length, 6);
+  game = recordFirstHands(game, [null, null]);
+  game = finishIRLDeal(game, { finalHand: { playerId: "irl-5", category: "one-pair" }, finalTrickWinnerId: "irl-6" });
+  assert.equal(game.players[4].score, 1);
+  assert.equal(game.players[5].score, 5);
+  assert.equal(validIRLGame(JSON.parse(JSON.stringify(game))), true);
+  assert.equal(createIRLGame([...names, "Seventh"], settings), null);
+});

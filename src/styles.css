@@ -1832,16 +1832,8 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
 .table-controls button:hover {
   background: #edf4e9;
 }
-.sidebar-bottom {
-  margin-top: auto;
-  padding-top: 20px;
-  color: #8a9b8d;
-  font-size: 11px;
-  line-height: 1.5;
-}
-.sidebar-bottom span {
-  color: #c77d6a;
-}
+
+
 button:focus-visible,
 input:focus-visible {
   outline: 3px solid #e1c47a;
@@ -2119,9 +2111,7 @@ input:focus-visible {
   .table-controls {
     margin-top: 20px;
   }
-  .sidebar-bottom {
-    display: none;
-  }
+
 }
 @media (max-width: 420px) {
   .hero-actions {
@@ -2273,3 +2263,16 @@ input:focus-visible {
 .hand-statistics dl div { display: flex; justify-content: space-between; gap: 16px; }
 .hand-statistics dt { text-transform: capitalize; }
 .hand-statistics dd { margin: 0; font-weight: 600; }
+
+/* Five or six humans share a wrapping opponent row, with one played stack
+   per seat. Keep the center and the viewer's hand on their own rows. */
+.felt-many .opponents { display: flex; flex-wrap: wrap; grid-column: 1 / -1; grid-row: 1; gap: 12px; }
+.felt-many .opponent { flex: 0 1 150px; width: 150px; min-height: 120px; transform: none; }
+.felt-many .table-center { grid-column: 1 / -1; grid-row: 2; }
+.felt-many .your-area { grid-column: 1 / -1; grid-row: 3; width: 100%; }
+.felt-many .opponent-label { max-width: 100%; }
+@media (max-width: 760px) {
+  .felt-many .opponent { flex-basis: 100px; width: 100px; }
+  .felt-many .opponent-cards .card-back { width: 25px; }
+  .felt-many .played-stack { transform: scale(.72); transform-origin: center top; height: 85px; }
+}
