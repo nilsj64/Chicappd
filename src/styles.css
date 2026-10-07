@@ -1455,6 +1455,7 @@ button:focus-visible { outline: 2px solid #698876; outline-offset: 4px; }
   width: 100%;
 }
 .hand-combination {
+  min-height: 1lh;
   margin: 0 0 28px;
   color: #f5deb0;
   font: italic 500 21px Fraunces, serif;

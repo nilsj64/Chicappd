@@ -917,7 +917,9 @@ function Table({
   const currentCardIds = new Set((game.currentTrick.length
     ? game.currentTrick : pendingTrick ? lastTrick?.cards ?? [] : []).map((played) => played.card.id));
   const selectionCount = exchangeAllowed ? selectedCardIds.length : 0;
-  const currentEvaluation = exchanging ? evaluateHand(local.hand) : null;
+  // The authoritative hand already contains replacements while they are in
+  // flight. Reveal its combination only after every new card has flipped.
+  const currentEvaluation = exchanging && !hiddenReplacementIds.size ? evaluateHand(local.hand) : null;
   const finalAward = game.handAwards.find((award) => award.exchangeCount === 3);
   const finalWinnerCategory = finalAward?.winnerId
     ? finalAward.evaluations[finalAward.winnerId]?.category : undefined;
