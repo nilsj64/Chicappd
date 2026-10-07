@@ -59,3 +59,45 @@ test("Worker persists each locked-human CPU turn and resumes five-second offers 
   assert.equal(saved.game.completedTricks.length, 0);
   assert.equal(updates.length, 13);
 });
+
+test('Worker keeps the Chicago choice open across long delivery, stale alarms and restart until eligible humans decide', async t => {
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
+  const { createRoom, createDeck, applyCommand, startRound } = await import('../src/game.ts');
+  let game = createRoom('Ada', 'ABCDE', 'ada');
+  game = applyCommand(game, { type: 'add-human', actorId: 'ada', playerId: 'bea', name: 'Bea' });
+  game = applyCommand(game, { type: 'add-bot', actorId: 'ada' });
+  game = startRound(game);
+  const deck = createDeck();
+  game = { ...game, tableStage: 'tricks', exchangeCount: 3, roundStarterId: 'demo-1', activePlayerId: 'demo-1',
+    chicagoPlayerId: null, chicagoPassedPlayerIds: [],
+    players: game.players.map((player, i) => ({ ...player, score: player.control === 'human' ? 15 : 0,
+      hand: deck.slice(i * 5, i * 5 + 5) })), deck: deck.slice(15), discard: [] };
+  let saved = { game, sessions: [{ playerId: 'ada', token: 'a' }, { playerId: 'bea', token: 'b' }], version: 0 };
+  const ctx = { storage: {
+    async get() { return structuredClone(saved); },
+    async put(key, value) { saved = structuredClone(value); },
+    async setAlarm() { assert.fail('No countdown should close an unanswered Chicago choice'); },
+  }, getWebSockets: () => [] };
+  let worker = new GameRoom(ctx, {});
+  now += 120000; // Delivery can take longer than the old five-second window.
+  await worker.alarm();
+  assert.equal(saved.game.currentTrick.length, 0);
+  const command = async (token, type) => {
+    const response = await worker.fetch(new Request('http://room/command', { method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ type }) }));
+    assert.equal(response.status, 200);
+    return (await response.json()).view;
+  };
+  const passed = await command('a', 'pass-chicago');
+  assert.deepEqual(passed.chicagoPassedPlayerIds, ['ada']);
+  assert.equal(passed.currentTrick.length, 0); // Bea still needs her own choice.
+  worker = new GameRoom(ctx, {});
+  await worker.alarm();
+  assert.equal(saved.game.currentTrick.length, 0);
+  const started = await command('b', 'pass-chicago');
+  assert.deepEqual(started.chicagoPassedPlayerIds, ['ada', 'bea']);
+  assert.equal(started.currentTrick.length, 1);
+  assert.equal(started.currentTrick[0].playerId, 'demo-1');
+  assert.equal(started.activePlayerId, 'ada');
+});

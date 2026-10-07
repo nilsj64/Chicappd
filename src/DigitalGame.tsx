@@ -11,6 +11,7 @@ import {
   needsTimedBotExchange,
   digitalMatchWinnerId,
   canPlayerDeclareChicago,
+  needsChicagoDecision,
   createRoom,
   randomRoomCode,
   suitName,
@@ -723,7 +724,7 @@ function cardLanding(cardId: string) {
   };
 }
 
-function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; viewerId: string; settings: GameSettings }) {
+function ScorePanel({ players, viewerId, settings, chicagoPlayerId }: { players: PlayerView[]; viewerId: string; settings: GameSettings; chicagoPlayerId?: string | null }) {
   const { t } = useI18n();
   return (
     <aside className="score-panel">
@@ -740,10 +741,10 @@ function ScorePanel({ players, viewerId, settings }: { players: PlayerView[]; vi
               {player.name}
               {player.id === viewerId && <small>{t("DU")}</small>}
             </span>
-            {(settings.chicagoRequiredToWin ?? true) && <span className={`chicago-check ${player.hasDeclaredChicago ? "checked" : ""}`}
-              role="img" aria-label={player.hasDeclaredChicago ? t("{0} har sagt Chicago", [player.name]) : t("{0} har inte sagt Chicago", [player.name])}
-              title={player.hasDeclaredChicago ? t("Har sagt Chicago") : t("Har inte sagt Chicago")}>
-              {player.hasDeclaredChicago ? "✓" : ""}
+            {(settings.chicagoRequiredToWin ?? true) && <span className={`chicago-check ${(player.hasDeclaredChicago || player.id === chicagoPlayerId) ? "checked" : ""}`}
+              role="img" aria-label={(player.hasDeclaredChicago || player.id === chicagoPlayerId) ? t("{0} har sagt Chicago", [player.name]) : t("{0} har inte sagt Chicago", [player.name])}
+              title={(player.hasDeclaredChicago || player.id === chicagoPlayerId) ? t("Har sagt Chicago") : t("Har inte sagt Chicago")}>
+              {(player.hasDeclaredChicago || player.id === chicagoPlayerId) ? "✓" : ""}
             </span>}
             <strong>{player.score}</strong>
           </div>
@@ -789,6 +790,7 @@ function Table({
   visibleDiscard,
   onPlayTrickCard,
   onDeclareChicago,
+  onPassChicago,
   flight,
   reviewedTrickCount,
   onCardLanded,
@@ -809,6 +811,7 @@ function Table({
   visibleDiscard: number;
   onPlayTrickCard: (id: string, from?: CardFlight["from"]) => void;
   onDeclareChicago: () => void;
+  onPassChicago?: () => void;
   flight: CardFlight | null;
   reviewedTrickCount: number;
   onCardLanded: () => void;
@@ -1056,6 +1059,7 @@ function Table({
                 {!showResult && <div className="trick-discard"><DiscardPile count={game.discardCount} /></div>}
                 {chicagoPlayer && <div className="chicago-status" role="status">
                   {t("Chicago:")}{" "}<strong>{chicagoPlayer.name}</strong> {" "}{t("satsar på alla stick")}{!game.currentTrick.length && !game.completedTricks.length && <small>{t("Ordinarie första utspelaren har företräde, därefter gäller spelordningen. Chicago-spelaren börjar; valet låses vid första kortet.")}</small>}
+                  {chicagoBreaker && !game.chicagoAward && <small>{t("Chicago är brutet. −15 poäng räknas vid rundans slut; krysset finns kvar.")}</small>}
                   {chicagoBreaker && <small>{message(game.activity.find(event => event === `${chicagoBreaker.name} bröt Chicago (+10 p)`) ?? `${chicagoBreaker.name} bröt Chicago`)}</small>}
                 </div>}
                 {playingTricks && !reviewingTrick && (!firstTrickCard || firstCardFlying) && leadPlayer &&
@@ -1077,6 +1081,8 @@ function Table({
                     {game.chicagoAward && <div><span>Chicago</span><strong>{chicagoPlayer?.name}
                       <b>{game.chicagoAward.points > 0 ? "+" : ""}{game.chicagoAward.points} {" "}{t("p")}</b></strong></div>}
                   </div>
+                  {game.chicagoAward?.playerId === viewerId && <p className="chicago-hint">
+                    {t("Chicago gav {0} poäng. Handpoäng och sista sticket räknas separat. Krysset finns kvar.", [game.chicagoAward.points > 0 ? "+15" : "−15"])}</p>}
                   <div className="round-hands"><h3>{t("Händer vid rundans slut")}</h3><ul>{game.players.map((player) => <li key={player.id}>
                     <span>{player.name}</span><span>{finalAward?.evaluations[player.id]
                       ? message(pokerHandName(finalAward.evaluations[player.id])) : ""}</span>
@@ -1154,6 +1160,16 @@ function Table({
                 <button type="button" className="button chicago-button" onClick={onDeclareChicago}
                   disabled={!canDeclareChicago || actionBusy || !!flight || !!exchangeQueue.length}>
                   {t("Säg Chicago · alla fem stick (+15 / −15)")}</button>}
+              {playingTricks && !game.currentTrick.length && !game.completedTricks.length && <>
+                {canDeclareChicago && !game.chicagoPassedPlayerIds?.includes(viewerId) &&
+                  game.players.find(player => player.id === game.activePlayerId)?.control === "bot" &&
+                  <button type="button" className="button button-secondary" disabled={actionBusy || !!flight}
+                    onClick={onPassChicago}>{t("Spela utan Chicago")}</button>}
+                {game.chicagoPlayerId === viewerId && <div className="chicago-hint" role="status">
+                  {t("Du har valt Chicago. Krysset finns kvar även om du förlorar. Valet låses vid första kortet.")}</div>}
+                {game.chicagoPlayerId && game.chicagoPlayerId !== viewerId && !canDeclareChicago && local.score >= 15 &&
+                  <div className="chicago-hint">{t("{0} har företräde till Chicago enligt spelordningen.", [chicagoPlayer?.name])}</div>}
+              </>}
               {playingTricks && !game.chicagoPlayerId && local.score < 15 && !game.completedTricks.length &&
                 <div className="chicago-hint">{t("Chicago kräver minst 15 poäng.")}</div>}
               {game.trickError && <div className="selection-count selection-error" role="status">{errorMessage(game.trickError)}</div>}
@@ -1179,7 +1195,7 @@ function Table({
               <p>{tip.text}</p>
             </div>)}
           </section>}
-          <ScorePanel players={game.players} viewerId={viewerId} settings={game.settings} />
+          <ScorePanel players={game.players} viewerId={viewerId} settings={game.settings} chicagoPlayerId={game.chicagoPlayerId} />
           {!exchanging && <div className="trick-tally">
             <span>{t("VUNNA STICK")}</span>
             {game.players.map((player) => <div key={player.id}>
@@ -1340,7 +1356,7 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
   }, [game?.phase, game?.tableStage, game?.pendingExchange, game?.activePlayerId, game?.exchangeEventSerial, online, exchangePlaybackBusy]);
 
   useEffect(() => {
-    if (online || exchangePlaybackBusy || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || flight || busyRef.current) return;
+    if (online || exchangePlaybackBusy || !game || !viewerId || game.phase !== "table" || game.tableStage !== "tricks" || game.waitingForNextTrick || needsChicagoDecision(game) || flight || busyRef.current) return;
     const active = game.players.find((player) => player.id === game.activePlayerId);
     if (!active || active.control !== "bot") return;
     const timer = window.setTimeout(() => {
@@ -1348,10 +1364,9 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
       if (!current || busyRef.current || current.activePlayerId !== active.id || current.waitingForNextTrick) return;
       const origin = cardOrigin(`[data-player-id="${active.id}"] .opponent-cards .card-back:last-child`);
       playOneCard(applyCommand(current, { type: "advance-bot", actorId: current.ownerId }), origin);
-    }, !game.currentTrick.length && !game.completedTricks.length &&
-      game.players.some((player) => player.control === "human" && player.score >= 15) ? 5000 : BOT_PAUSE_MS);
+    }, BOT_PAUSE_MS);
     return () => window.clearTimeout(timer);
-  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, flight, viewerId, online, exchangePlaybackBusy]);
+  }, [game?.phase, game?.tableStage, game?.activePlayerId, game?.currentTrick.length, game?.completedTricks.length, game?.waitingForNextTrick, game?.chicagoPassedPlayerIds, game?.chicagoPlayerId, flight, viewerId, online, exchangePlaybackBusy]);
 
   useEffect(() => {
     if (view?.phase === "table" && view.tableStage === "exchange" &&
@@ -1470,6 +1485,10 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
     actionBusy={busy}
     visibleDiscard={view.discardCount}
     onPlayTrickCard={playHumanCard}
+    onPassChicago={() => {
+      if (online) void send({ type: "pass-chicago" });
+      else setGame(current => current && applyCommand(current, { type: "pass-chicago", actorId: viewerId }));
+    }}
     onDeclareChicago={() => {
       if (online) void send({ type: "declare-chicago" });
       else setGame((current) => current && applyCommand(current, { type: "declare-chicago", actorId: viewerId }));

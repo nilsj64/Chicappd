@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { applyCommand, createRoom, randomRoomCode, viewForPlayer, roomCapacity, needsTimedBotExchange, CPU_EXCHANGE_PAUSE_MS } from "../src/game.ts";
+import { applyCommand, createRoom, randomRoomCode, viewForPlayer, roomCapacity, needsTimedBotExchange, needsChicagoDecision, CPU_EXCHANGE_PAUSE_MS } from "../src/game.ts";
 import type { GameCommand, GameSettings, GameState } from "../src/game.ts";
 
 type Env = { ROOMS: DurableObjectNamespace<GameRoom>; FRONTEND_ORIGIN: string };
@@ -15,13 +15,12 @@ const validName = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.trim().length <= 24;
 
 export class GameRoom extends DurableObject<Env> {
-  private openingChicagoWindow(game: GameState): boolean {
-    return game.tableStage === "tricks" && !game.currentTrick.length && !game.completedTricks.length &&
-      game.players.some((player) => player.control === "human" && player.score >= 15) &&
+  private waitingForChicagoDecision(game: GameState): boolean {
+    return needsChicagoDecision(game) &&
       game.players.find((player) => player.id === game.activePlayerId)?.control === "bot";
   }
-  private advanceBots(game: GameState, closeChicagoWindow = false): GameState {
-    if (!closeChicagoWindow && this.openingChicagoWindow(game)) return game;
+  private advanceBots(game: GameState): GameState {
+    if (this.waitingForChicagoDecision(game)) return game;
     let next = game;
     for (let turn = 0; turn < 20 && next.phase === "table" &&
       next.tableStage === "tricks" && !next.waitingForNextTrick &&
@@ -123,6 +122,7 @@ export class GameRoom extends DurableObject<Env> {
         command = { type: "exchange-choice", actorId: session.playerId, accept: input.accept };
       if (input?.type === "play-card" && typeof input.cardId === "string")
         command = { type: "play-card", actorId: session.playerId, cardId: input.cardId };
+      if (input?.type === "pass-chicago") command = { type: "pass-chicago", actorId: session.playerId };
       if (input?.type === "declare-chicago") command = { type: "declare-chicago", actorId: session.playerId };
       if (input?.type === "set-settings" && input.settings)
         command = { type: "set-settings", actorId: session.playerId, settings: input.settings };
@@ -136,10 +136,10 @@ export class GameRoom extends DurableObject<Env> {
       if (applied === saved.game) return json({ error: "Draget är inte tillåtet just nu.", view: this.view(saved, session.playerId) }, 409);
       const next = this.advanceBots(applied);
       saved = { ...saved, game: next };
-      if (needsTimedBotExchange(next) || this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
+      if (needsTimedBotExchange(next) || next.waitingForNextTrick || next.pendingExchange &&
         next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
         await this.ctx.storage.setAlarm(next.pendingExchange?.revealUntil ??
-          Date.now() + (this.openingChicagoWindow(next) ? 5000 : CPU_EXCHANGE_PAUSE_MS));
+          Date.now() + CPU_EXCHANGE_PAUSE_MS);
       await this.persist(saved);
       return json({ view: this.view(saved, session.playerId) });
     }
@@ -147,14 +147,14 @@ export class GameRoom extends DurableObject<Env> {
   }
   async alarm() {
     const saved = await this.saved();
-    if (!saved || (!saved.game.waitingForNextTrick && !saved.game.pendingExchange && !needsTimedBotExchange(saved.game) && !this.openingChicagoWindow(saved.game))) return;
+    if (!saved || (!saved.game.waitingForNextTrick && !saved.game.pendingExchange && !needsTimedBotExchange(saved.game))) return;
     const next = this.advanceBots(applyCommand(saved.game, {
-      type: saved.game.pendingExchange || needsTimedBotExchange(saved.game) || this.openingChicagoWindow(saved.game) ? "advance-bot" : "continue-trick", actorId: saved.game.ownerId,
-    }), true);
-    if (needsTimedBotExchange(next) || this.openingChicagoWindow(next) || next.waitingForNextTrick || next.pendingExchange &&
+      type: saved.game.pendingExchange || needsTimedBotExchange(saved.game) ? "advance-bot" : "continue-trick", actorId: saved.game.ownerId,
+    }));
+    if (needsTimedBotExchange(next) || next.waitingForNextTrick || next.pendingExchange &&
       next.players.find((p) => p.id === next.pendingExchange?.playerId)?.control === "bot")
       await this.ctx.storage.setAlarm(next.pendingExchange?.revealUntil ??
-          Date.now() + (this.openingChicagoWindow(next) ? 5000 : CPU_EXCHANGE_PAUSE_MS));
+          Date.now() + CPU_EXCHANGE_PAUSE_MS);
     if (next !== saved.game) await this.persist({ ...saved, game: next });
   }
 }

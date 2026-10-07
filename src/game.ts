@@ -85,6 +85,7 @@ export type GameState = {
   finalTrickAward: TrickAward | null;
   settings: GameSettings;
   chicagoPlayerId: string | null;
+  chicagoPassedPlayerIds?: string[];
   chicagoBreakerId: string | null;
   chicagoBreakBonusAwarded: boolean;
   chicagoAward: ChicagoAward | null;
@@ -137,6 +138,16 @@ export function canPlayerDeclareChicago(
   const priority = (id: string) =>
     (game.players.findIndex((candidate) => candidate.id === id) - Math.max(0, starter) + game.players.length) % game.players.length;
   return priority(playerId) < priority(game.chicagoPlayerId);
+}
+
+/** A CPU must not close an eligible human's declaration choice while their
+ * client is still presenting the exchange. Passing is explicit and persisted. */
+export function needsChicagoDecision(game: Omit<Parameters<typeof canPlayerDeclareChicago>[0], "players"> & {
+  players: readonly { id: string; score: number; control: "human" | "bot" }[];
+  chicagoPassedPlayerIds?: readonly string[];
+}): boolean {
+  return game.players.some(player => player.control === "human" &&
+    !game.chicagoPassedPlayerIds?.includes(player.id) && canPlayerDeclareChicago(game, player.id));
 }
 
 export function playedCardsForPlayer(game: Pick<GameState, "completedTricks" | "currentTrick">, playerId: string): Card[] {
@@ -212,6 +223,7 @@ export function createRoom(
     settings: { ...defaultSettings },
     chicagoBreakBonusAwarded: false,
     chicagoPlayerId: null,
+    chicagoPassedPlayerIds: [],
     chicagoBreakerId: null,
     chicagoAward: null,
     activity: [],
@@ -278,6 +290,7 @@ export function startRound(game: GameState): GameState {
     finalHands: null,
     finalTrickAward: null,
     chicagoPlayerId: null,
+    chicagoPassedPlayerIds: [],
     chicagoBreakerId: null,
     chicagoAward: null,
     activity: [],
@@ -297,7 +310,7 @@ function returnToLobby(game: GameState): GameState {
     selectedCardIds: [], exchangeCount: 0, exchangeSubmittedPlayerIds: [],
     exchangeFeedback: null, handAwards: [], finalHands: null, finalTrickAward: null,
     pendingExchange: null,
-    chicagoPlayerId: null, chicagoBreakerId: null, chicagoAward: null,
+    chicagoPlayerId: null, chicagoPassedPlayerIds: [], chicagoBreakerId: null, chicagoAward: null,
     activity: [], currentTrick: [], completedTricks: [],
     waitingForNextTrick: false, trickError: null,
   };
@@ -720,6 +733,7 @@ export function randomRoomCode(): string {
 export type GameCommand =
   | { type: "set-settings"; actorId: string; settings: GameSettings }
   | { type: "declare-chicago"; actorId: string }
+  | { type: "pass-chicago"; actorId: string }
   | { type: "add-human"; actorId: string; playerId: string; name: string }
   | { type: "add-bot"; actorId: string }
   | { type: "remove-player"; actorId: string; playerId: string }
@@ -743,6 +757,9 @@ export function applyCommand(game: GameState, command: GameCommand): GameState {
         players: command.settings.allowNegativeScores ? game.players : game.players.map((player) => ({
           ...player, score: scoreAfter(player.score, 0, command.settings),
         })) };
+    case "pass-chicago":
+      if (!canPlayerDeclareChicago(game, actor.id) || game.chicagoPassedPlayerIds?.includes(actor.id)) return game;
+      return { ...game, chicagoPassedPlayerIds: [...(game.chicagoPassedPlayerIds ?? []), actor.id] };
     case "declare-chicago":
       return declareChicago(game, actor.id);
     case "add-human":
@@ -832,6 +849,7 @@ export function viewForPlayer(game: GameState, viewerId: string): GameView | nul
     finalTrickAward: game.finalTrickAward, activity: [...game.activity],
     settings: normalizeSettings(game.settings),
     chicagoPlayerId: game.chicagoPlayerId ?? null,
+    chicagoPassedPlayerIds: [...(game.chicagoPassedPlayerIds ?? [])],
     chicagoBreakerId: game.chicagoBreakerId ?? null,
     chicagoBreakBonusAwarded: game.chicagoBreakBonusAwarded ?? false,
     chicagoAward: game.chicagoAward ?? null,

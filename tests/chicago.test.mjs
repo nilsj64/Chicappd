@@ -189,3 +189,24 @@ for (const enabled of [false, true]) {
     assert.equal(createRoom("Ada", "NEW", "ada").chicagoBreakBonusAwarded, false);
   });
 }
+
+test('explicit Chicago pass is scoped to an eligible player and resets next round without changing scores or qualification', async () => {
+  const { needsChicagoDecision } = await import('../src/game.ts');
+  let game = setup(false);
+  assert.equal(needsChicagoDecision(game), true);
+  assert.strictEqual(applyCommand(game, { type: 'pass-chicago', actorId: 'bea' }), game);
+  const passed = applyCommand(game, { type: 'pass-chicago', actorId: 'ada' });
+  assert.deepEqual(passed.chicagoPassedPlayerIds, ['ada']);
+  assert.equal(needsChicagoDecision(passed), false);
+  assert.deepEqual(passed.players, game.players);
+  assert.strictEqual(applyCommand(passed, { type: 'pass-chicago', actorId: 'ada' }), passed);
+  // A pass does not change the existing right to reconsider before the first card.
+  game = applyCommand(passed, { type: 'declare-chicago', actorId: 'ada' });
+  assert.equal(game.chicagoPlayerId, 'ada');
+  game = playAll(game);
+  assert.equal(game.players[0].score, 0);
+  assert.equal(game.players[0].hasDeclaredChicago, true);
+  const next = applyCommand(game, { type: 'start-round', actorId: 'ada' });
+  assert.deepEqual(next.chicagoPassedPlayerIds, []);
+  assert.equal(next.players[0].hasDeclaredChicago, true);
+});

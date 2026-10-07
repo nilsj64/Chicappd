@@ -218,3 +218,29 @@ test("new CPU names are consistent in lobby, active table and both languages", (
     assert.doesNotMatch(lobby,/\bSam\b|\bKim\b/);assert.doesNotMatch(table,/\bSam\b|\bKim\b/);
   }
 });
+
+test('Chicago confirmation shows the chosen check, explains lost points, and offers an explicit pass off-turn', () => {
+  const room=addDemoPlayer(createRoom('Ada', 'CHECK', 'ada'));
+  let game=startRound(room);
+  game={...game,tableStage:'tricks',exchangeCount:3,roundStarterId:'demo-1',activePlayerId:'demo-1',
+    players:game.players.map(player=>({...player,score:player.id==='ada'?30:0}))};
+  const props={viewerId:'ada',online:true,selectedCardIds:[],exchangeBusy:false,actionBusy:false,
+    visibleDiscard:0,flight:null,reviewedTrickCount:5,
+    ...Object.fromEntries(['onToggle','onExchange','onKeep','onExchangeChoice','onPlayTrickCard','onDeclareChicago','onPassChicago','onCardLanded','onNextRound','onLobby','onLeave'].map(key=>[key,noop]))};
+  const pending=render('sv',React.createElement(Table,{...props,game:viewForPlayer(game,'ada')}));
+  assert.match(pending,/Spela utan Chicago/);
+  game=applyCommand(game,{type:'declare-chicago',actorId:'ada'});
+  const chosen=render('sv',React.createElement(Table,{...props,game:viewForPlayer(game,'ada')}));
+  assert.match(chosen,/chicago-check checked/);
+  assert.match(chosen,/Du har valt Chicago/);
+  assert.doesNotMatch(chosen,/Spela utan Chicago/);
+  assert.equal(game.players[0].hasDeclaredChicago,false); // Seat priority is still resolved at the first card.
+  const result={...game,tableStage:'result',activePlayerId:null,chicagoBreakerId:'demo-1',chicagoAward:{playerId:'ada',points:-15},
+    players:game.players.map(player=>player.id==='ada'?{...player,score:15,hasDeclaredChicago:true}:player)};
+  const lost=render('sv',React.createElement(Table,{...props,game:viewForPlayer(result,'ada')}));
+  assert.match(lost,/Chicago gav −15 poäng/);
+  assert.match(lost,/Krysset finns kvar/);
+  assert.match(lost,/chicago-check checked/);
+  const en=render('en',React.createElement(Table,{...props,game:viewForPlayer(result,'ada')}));
+  assert.match(en,/Chicago awarded −15 points/);
+});
