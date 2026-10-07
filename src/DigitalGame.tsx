@@ -29,7 +29,7 @@ import { MatchPodium } from "./MatchPodium";
 import ChibiDealer from "./ChibiDealer";
 import { DEALER_RELEASE_MS, EXCHANGE_STAGGER_MS, REPLACEMENT_FLIGHT_MS,
   REPLACEMENT_FLIP_MS, exchangeTimeline } from "./dealerAnimation";
-import { exchangeHandSlots, replacementKey } from "./exchangePresentation";
+import { exchangeDisplayState, exchangeHandSlots, replacementKey } from "./exchangePresentation";
 import type { CardRect, ExchangePlayback, Replacement } from "./exchangePresentation";
 import { useAccountHistory } from "./HistoryProvider";
 import { accountName } from "./account";
@@ -588,8 +588,8 @@ function ReplacementFlight({ replacement, event, own, onLanded }: {
   </div>;
 }
 
-function ExchangeFlight({ playback, playerName, own, releaseCue, onDeal, onLanded, onComplete }: {
-  playback: ExchangePlayback; playerName: string; own: boolean; releaseCue?: string;
+function ExchangeFlight({ playback, playerName, own, releaseCue, completedDealCue, onDeal, onLanded, onComplete }: {
+  playback: ExchangePlayback; playerName: string; own: boolean; releaseCue?: string; completedDealCue?: string;
   onDeal: (cue: string) => void; onLanded: (key: string) => void; onComplete: () => void;
 }) {
   const { t } = useI18n();
@@ -598,14 +598,20 @@ function ExchangeFlight({ playback, playerName, own, releaseCue, onDeal, onLande
   const [cards, setCards] = useState<CSSProperties[]>([]);
   const [replacementIndex, setReplacementIndex] = useState(0);
   const [delivering, setDelivering] = useState<number | null>(null);
+  const [settledReplacement, setSettledReplacement] = useState(false);
   const completeRef = useRef(onComplete);
   completeRef.current = onComplete;
   function finishReplacement(key: string) {
     onLanded(key);
     setDelivering(null);
-    if (replacementIndex + 1 < replacements.length) setReplacementIndex(replacementIndex + 1);
-    else onComplete();
+    setSettledReplacement(true);
   }
+  useLayoutEffect(() => {
+    if (!settledReplacement || completedDealCue !== `exchange:${event.id}:${replacementIndex}`) return;
+    setSettledReplacement(false);
+    if (replacementIndex + 1 < replacements.length) setReplacementIndex(replacementIndex + 1);
+    else completeRef.current();
+  }, [settledReplacement, completedDealCue, event.id, replacementIndex, replacements.length]);
   useLayoutEffect(() => {
     if (releaseCue === `exchange:${event.id}:${replacementIndex}`) setDelivering(replacementIndex);
   }, [releaseCue, event.id, replacementIndex]);
@@ -818,12 +824,6 @@ function Table({
   const [supportOpen, setSupportOpen] = useState(false);
   const advice = supportOpen ? supportAdvice(game, viewerId, language) : null;
   const opponents = game.players.filter((player) => player.id !== viewerId);
-  const exchanging = game.tableStage === "exchange";
-  const yourExchangeTurn = exchanging && game.activePlayerId === local.id;
-  const pendingExchange = game.pendingExchange;
-  const yourChoice = pendingExchange?.playerId === viewerId;
-  const playingTricks = game.tableStage === "tricks";
-  const reviewingTrick = playingTricks && game.waitingForNextTrick;
   // Presentation snapshots preserve actual cards and the positions they left.
   // Fresh events are captured before painting the authoritative replacement hand.
   const seenExchangeEvent = useRef(game.exchangeEvents.at(-1)?.id ?? 0);
@@ -834,6 +834,14 @@ function Table({
   const [landedReplacements, setLandedReplacements] = useState(new Set<string>());
   const [dealCue, setDealCue] = useState<string>();
   const [releaseCue, setReleaseCue] = useState<string>();
+  const [completedDealCue, setCompletedDealCue] = useState<string>();
+  const display = exchangeDisplayState(game, exchangeQueue, seenExchangeEvent.current);
+  const exchanging = display.exchanging;
+  const yourExchangeTurn = exchanging && !display.busy && display.activePlayerId === local.id;
+  const pendingExchange = display.pendingExchange;
+  const yourChoice = pendingExchange?.playerId === viewerId;
+  const playingTricks = !display.busy && game.tableStage === "tricks";
+  const reviewingTrick = playingTricks && game.waitingForNextTrick;
   const [initialDeal] = useState(game.exchangeCount === 0 && !game.currentTrick.length &&
     !game.completedTricks.length && game.tableStage !== "result");
   const initialCardIds = useRef(new Set(local.hand.map(card => card.id)));
@@ -873,9 +881,9 @@ function Table({
   });
   const exchangePlayback = exchangeQueue[0];
   // Finish any last delivery before hiding the dealer for trick play.
-  const showDealer = exchanging || exchangeQueue.some(playback => playback.replacements.length > 0);
+  const showDealer = exchanging;
   useEffect(() => {
-    // Animated exchanges finish on the actual final landing/flip callback.
+    // Animated exchanges finish after both the final landing/flip and dealer recovery.
     // Keeps and reduced-motion updates have no moving cards to wait for.
     if (!exchangePlayback || (!exchangePlayback.reducedMotion && exchangePlayback.replacements.length)) return;
     const timer = window.setTimeout(() => setExchangeQueue(queue => queue.slice(1)),
@@ -883,16 +891,24 @@ function Table({
     return () => window.clearTimeout(timer);
   }, [exchangePlayback]);
   useLayoutEffect(() => {
-    onExchangePlaybackBusy?.(!!exchangeQueue.length);
-  }, [!!exchangeQueue.length, onExchangePlaybackBusy]);
+    onExchangePlaybackBusy?.(display.busy);
+  }, [display.busy, onExchangePlaybackBusy]);
   useEffect(() => () => onExchangePlaybackBusy?.(false), [onExchangePlaybackBusy]);
+  useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const reduce = () => {
+      if (motion.matches) setExchangeQueue(queue => queue.map(item => ({ ...item, reducedMotion: true })));
+    };
+    motion.addEventListener("change", reduce);
+    return () => motion.removeEventListener("change", reduce);
+  }, []);
   const hiddenReplacementIds = new Set(exchangeQueue.flatMap(playback => playback.reducedMotion ? [] :
     playback.replacements.filter(replacement => replacement.card &&
       !landedReplacements.has(replacementKey(playback.event.id, replacement.card.id)))
       .map(replacement => replacement.card!.id)));
   const humanTurn = playingTricks && game.activePlayerId === local.id && !reviewingTrick && !flight && !exchangeQueue.length;
   const lastTrick = game.completedTricks.at(-1);
-  const nextLeader = game.players.find((player) => player.id === game.activePlayerId);
+  const nextLeader = game.players.find((player) => player.id === display.activePlayerId);
   const firstTrickCard = game.currentTrick[0];
   const leadPlayer = game.players.find((player) => player.id === (firstTrickCard?.playerId ?? game.activePlayerId));
   const firstCardFlying = !!firstTrickCard && flight?.card.id === firstTrickCard.card.id;
@@ -981,11 +997,11 @@ function Table({
           <div className={`felt ${showDealer ? "felt-dealer" : ""} ${game.players.length > 4 ? "felt-many" : ""} ${exchanging ? "" : "felt-tricks"} ${showResult ? "felt-result" : ""}`}>
             <div className="felt-line" />
             {showDealer && <div className="dealer-zone">
-              <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue}
+              <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue} onDealComplete={setCompletedDealCue}
                 initialDeal={initialDeal}
-                presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${game.exchangeCount + 1}` : undefined} />
+                presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${display.exchangeCount + 1}` : undefined} />
             </div>}
-            {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{game.exchangeCount + 1} {" "}{t("av 3")}</div>}
+            {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{display.exchangeCount + 1} {" "}{t("av 3")}</div>}
             {showExchangeFeedback && game.exchangeFeedback && <div className="exchange-toast" role="status">
               {t("Kortbyte")}{" "}{game.exchangeFeedback.exchangeCount} {" "}{t("klart ·")}{" "}{game.exchangeFeedback.changedCards === 0
                 ? t("du behöll handen")
@@ -993,7 +1009,7 @@ function Table({
             </div>}
             {exchangePlayback && <ExchangeFlight key={exchangePlayback.event.id} playback={exchangePlayback}
               playerName={game.players.find((player) => player.id === exchangePlayback.event.playerId)?.name ?? t("Spelare")}
-              own={exchangePlayback.event.playerId === viewerId} releaseCue={releaseCue} onDeal={setDealCue}
+              own={exchangePlayback.event.playerId === viewerId} releaseCue={releaseCue} completedDealCue={completedDealCue} onDeal={setDealCue}
               onLanded={key => setLandedReplacements(current => new Set([...current, key]))}
               onComplete={() => setExchangeQueue(queue => queue[0]?.event.id === exchangePlayback.event.id ? queue.slice(1) : queue)} />}
             <div className="opponents">
@@ -1002,7 +1018,7 @@ function Table({
                   key={player.id}
                   player={player}
                   viewerId={viewerId}
-                  active={game.activePlayerId === player.id}
+                  active={display.activePlayerId === player.id}
                   position={opponents.length === 1 ? "top" : opponents.length === 2
                     ? index === 0 ? "left" : "right"
                     : ["left", "top", "right"][index % 3] as "left" | "top" | "right"}
@@ -1162,7 +1178,7 @@ function Table({
             </div>)}
           </section>}
           <ScorePanel players={game.players} viewerId={viewerId} settings={game.settings} />
-          {game.tableStage !== "exchange" && <div className="trick-tally">
+          {!exchanging && <div className="trick-tally">
             <span>{t("VUNNA STICK")}</span>
             {game.players.map((player) => <div key={player.id}>
               <span>{player.name}</span>
@@ -1311,8 +1327,10 @@ export default function DigitalGame({ initialMode, onExit }: { initialMode: Entr
     const botOffer = game.pendingExchange &&
       game.players.find(player => player.id === game.pendingExchange?.playerId)?.control === "bot";
     if (!botOffer && !needsTimedBotExchange(game)) return;
+    // The offer becomes visible only after earlier deliveries finish. Give it
+    // its existing reading time from that point, rather than an expired deadline.
     const delay = botOffer
-      ? Math.max(1, (game.pendingExchange!.revealUntil ?? Date.now() + CPU_REVEAL_MS) - Date.now() + 20)
+      ? CPU_REVEAL_MS
       : CPU_EXCHANGE_PAUSE_MS;
     const timer = window.setTimeout(() => setGame(current => current
       ? applyCommand(current, { type: "advance-bot", actorId: current.ownerId }) : current), delay);

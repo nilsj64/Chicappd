@@ -1,4 +1,4 @@
-import type { Card, ExchangeEvent } from "./game";
+import type { Card, ExchangeEvent, GameView } from "./game";
 
 export type CardRect = { x: number; y: number; width: number; height: number };
 export type Replacement = { card?: Card; slot: number };
@@ -29,3 +29,19 @@ export function exchangeHandSlots(previous: readonly Card[], next: readonly Card
 }
 
 export const replacementKey = (eventId: number, cardId: string) => `${eventId}:${cardId}`;
+
+/** Authority may advance in a batch; the table follows the oldest unfinished
+ * exchange, including events not yet captured by the layout effect. */
+export function exchangeDisplayState(game: Pick<GameView,
+  "tableStage" | "pendingExchange" | "activePlayerId" | "exchangeCount" | "exchangeEvents">,
+  queue: readonly Pick<ExchangePlayback, "event">[], seenEventId: number) {
+  const event = queue[0]?.event ?? game.exchangeEvents.find(event => event.id > seenEventId);
+  const busy = !!event;
+  return {
+    busy,
+    exchanging: game.tableStage === "exchange" || busy,
+    pendingExchange: busy ? null : game.pendingExchange,
+    activePlayerId: event?.playerId ?? game.activePlayerId,
+    exchangeCount: event ? event.exchangeCount - 1 : game.exchangeCount,
+  };
+}

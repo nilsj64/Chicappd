@@ -3,11 +3,12 @@ import { CHIBI_FRAMES, DEALER_ANIMATIONS, DEALER_DEAL_MS, DEALER_FRAME_MS } from
 import type { DealerAnimation } from "./dealerAnimation";
 
 /** Decorative playback only; never changes authoritative game state. */
-export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, onRelease }: {
+export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, onRelease, onDealComplete }: {
   dealCue?: string;
   initialDeal: boolean;
   presentedExchange?: string;
   onRelease?: (cue: string) => void;
+  onDealComplete?: (cue: string) => void;
 }) {
   const [playback, setPlayback] = useState<{ animation: DealerAnimation; id: string }>({
     animation: initialDeal ? "deal" : "idle", id: "round",
@@ -51,18 +52,20 @@ export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, o
       if (reducedMotion && playback.animation === "deal") {
         setFrameIndex(0);
         setPlayback({ animation: "idle", id: "waiting" });
+        onDealComplete?.(playback.id);
       }
       else if (frameIndex + 1 < frames.length) setFrameIndex(frameIndex + 1);
       else if (playback.animation === "idle") setFrameIndex(0);
       else if (playback.animation === "deal") {
         setFrameIndex(0);
         setPlayback({ animation: "idle", id: "waiting" });
+        onDealComplete?.(playback.id);
       }
       // Hold the visible card while waiting for the exchange decision.
     }, reducedMotion ? DEALER_DEAL_MS :
       playback.animation === "idle" ? (frameIndex === 3 ? 120 : 1400) : DEALER_FRAME_MS);
     return () => window.clearTimeout(timer);
-  }, [playback, frameIndex]);
+  }, [playback, frameIndex, onDealComplete]);
   const sequence = DEALER_ANIMATIONS[playback.animation];
   const frame = sequence[Math.min(frameIndex, sequence.length - 1)];
   const [x, y, width, height] = CHIBI_FRAMES[frame];
