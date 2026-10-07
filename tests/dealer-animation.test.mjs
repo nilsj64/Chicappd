@@ -72,3 +72,14 @@ test("keeping cards creates no replacement playback", () => {
   assert.deepEqual(exchangeHandSlots(game.players[0].hand, kept.players[0].hand).replacements, []);
   assert.deepEqual(exchangeTimeline(0).replacements, []);
 });
+
+test('the selected poses all belong to gameplay actions and release timing matches the deal sequence', async () => {
+  const { CHIBI_FRAMES, CHIBI_BODY_X, DEALER_ANIMATIONS, DEALER_FRAME_MS,
+    DEALER_RELEASE_FRAME, DEALER_DEAL_MS } = await import('../src/dealerAnimation.ts');
+  const used = new Set(Object.values(DEALER_ANIMATIONS).flat());
+  assert.deepEqual([...used].sort(), Object.keys(CHIBI_FRAMES).sort());
+  for (const frame of used) assert.ok(Number.isFinite(CHIBI_BODY_X[frame]));
+  assert.equal(DEALER_ANIMATIONS.deal[DEALER_RELEASE_FRAME], 'release');
+  assert.equal(DEALER_RELEASE_MS, DEALER_RELEASE_FRAME * DEALER_FRAME_MS);
+  assert.equal(DEALER_DEAL_MS, DEALER_ANIMATIONS.deal.length * DEALER_FRAME_MS);
+});

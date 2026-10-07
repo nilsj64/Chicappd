@@ -503,9 +503,16 @@ function DeckPile({ count }: { count: number }) {
   </div>;
 }
 
+function playerAreaSelector(playerId: string) {
+  const escaped = playerId.replace(/[^a-zA-Z0-9_-]/gu, char => `\\${char.codePointAt(0)!.toString(16)} `);
+  return `[data-player-id="${escaped}"]`;
+}
+function replacementTargetSelector(own: boolean, playerId: string, slot: number) {
+  return own ? `.your-hand [data-dealer-slot="${slot}"] .playing-card`
+    : `${playerAreaSelector(playerId)} .opponent-cards .card-back:nth-child(${slot + 1})`;
+}
 function replacementTarget(own: boolean, playerId: string, slot: number) {
-  return own ? document.querySelector(`.your-hand [data-dealer-slot="${slot}"] .playing-card`)
-    : document.querySelector(`[data-player-id="${CSS.escape(playerId)}"] .opponent-cards .card-back:nth-child(${slot + 1})`);
+  return document.querySelector(replacementTargetSelector(own, playerId, slot));
 }
 
 function ReplacementFlight({ replacement, event, own, onLanded }: {
@@ -541,13 +548,14 @@ function ReplacementFlight({ replacement, event, own, onLanded }: {
     function position() {
       if (done || !node || !dealer || !target) return;
       const to = target.getBoundingClientRect();
+      const hand = dealer.querySelector(".dealer-release-origin")?.getBoundingClientRect();
       const from = dealer.getBoundingClientRect();
       Object.assign(node.style, { left: `${to.x}px`, top: `${to.y}px`, width: `${to.width}px`, height: `${to.height}px` });
       if (arrived) return;
       const progress = animation?.currentTime;
       animation?.cancel();
-      const x = from.x + from.width * .28 - to.x - to.width / 2;
-      const y = from.y + from.height * .65 - to.y - to.height / 2;
+      const x = (hand ? hand.x + hand.width / 2 : from.x + from.width * .28) - to.x - to.width / 2;
+      const y = (hand ? hand.y + hand.height / 2 : from.y + from.height * .65) - to.y - to.height / 2;
       const start = `translate(${x}px, ${y}px) scale(.35) rotate(-8deg)`;
       animation = node.animate([
         { transform: start, opacity: 0, offset: 0 },
@@ -883,6 +891,13 @@ function Table({
     geometry.current = positions;
   });
   const exchangePlayback = exchangeQueue[0];
+  const cueIndex = Number(dealCue?.split(":")[2] ?? 0);
+  const dealingReplacement = exchangePlayback?.replacements[cueIndex];
+  const dealerTargetSelector = pendingExchange
+    ? pendingExchange.playerId === viewerId ? ".your-hand" : `${playerAreaSelector(pendingExchange.playerId)} .opponent-cards`
+    : exchangePlayback && dealingReplacement
+      ? replacementTargetSelector(exchangePlayback.event.playerId === viewerId, exchangePlayback.event.playerId, dealingReplacement.slot)
+      : ".your-hand";
   // Finish any last delivery before hiding the dealer for trick play.
   const showDealer = exchanging;
   useEffect(() => {
@@ -1003,7 +1018,7 @@ function Table({
             <div className="felt-line" />
             {showDealer && <div className="dealer-zone">
               <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue} onDealComplete={setCompletedDealCue}
-                initialDeal={initialDeal}
+                initialDeal={initialDeal} targetSelector={dealerTargetSelector}
                 presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${display.exchangeCount + 1}` : undefined} />
             </div>}
             {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{display.exchangeCount + 1} {" "}{t("av 3")}</div>}
