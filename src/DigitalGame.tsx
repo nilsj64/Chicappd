@@ -891,13 +891,6 @@ function Table({
     geometry.current = positions;
   });
   const exchangePlayback = exchangeQueue[0];
-  const cueIndex = Number(dealCue?.split(":")[2] ?? 0);
-  const dealingReplacement = exchangePlayback?.replacements[cueIndex];
-  const dealerTargetSelector = pendingExchange
-    ? pendingExchange.playerId === viewerId ? ".your-hand" : `${playerAreaSelector(pendingExchange.playerId)} .opponent-cards`
-    : exchangePlayback && dealingReplacement
-      ? replacementTargetSelector(exchangePlayback.event.playerId === viewerId, exchangePlayback.event.playerId, dealingReplacement.slot)
-      : ".your-hand";
   // Finish any last delivery before hiding the dealer for trick play.
   const showDealer = exchanging;
   useEffect(() => {
@@ -1018,7 +1011,7 @@ function Table({
             <div className="felt-line" />
             {showDealer && <div className="dealer-zone">
               <ChibiDealer dealCue={dealCue} onRelease={setReleaseCue} onDealComplete={setCompletedDealCue}
-                initialDeal={initialDeal} targetSelector={dealerTargetSelector}
+                initialDeal={initialDeal}
                 presentedExchange={pendingExchange ? `${pendingExchange.playerId}:${display.exchangeCount + 1}` : undefined} />
             </div>}
             {exchanging && <div className="exchange-round">{t("Kortbyte")}{" "}{display.exchangeCount + 1} {" "}{t("av 3")}</div>}

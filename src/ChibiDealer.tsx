@@ -1,37 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CHIBI_FRAMES, CHIBI_BODY_X, DEALER_ANIMATIONS, DEALER_DEAL_MS, DEALER_FRAME_MS, DEALER_RELEASE_FRAME, DEALER_HAND, dealerMirrored } from "./dealerAnimation";
-import type { DealerAnimation, DealerDirection } from "./dealerAnimation";
+import { CHIBI_FRAMES, CHIBI_SHEET, DEALER_ANIMATIONS, DEALER_DEAL_MS, DEALER_FRAME_MS, DEALER_RELEASE_FRAME, DEALER_HAND, DEALER_IDLE_FRAME_MS } from "./dealerAnimation";
+import type { DealerAnimation } from "./dealerAnimation";
 
 /** Decorative playback only; never changes authoritative game state. */
-export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, onRelease, onDealComplete, targetSelector = ".your-hand" }: {
+export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, onRelease, onDealComplete }: {
   dealCue?: string;
   initialDeal: boolean;
   presentedExchange?: string;
   onRelease?: (cue: string) => void;
   onDealComplete?: (cue: string) => void;
-  targetSelector?: string;
 }) {
   const [playback, setPlayback] = useState<{ animation: DealerAnimation; id: string }>({
     animation: initialDeal ? "deal" : "idle", id: "round",
   });
   const [frameIndex, setFrameIndex] = useState(0);
-  const dealerRef = useRef<HTMLDivElement>(null);
-  const [direction, setDirection] = useState<DealerDirection>("left");
-  useLayoutEffect(() => {
-    const dealer = dealerRef.current;
-    const target = document.querySelector(targetSelector);
-    if (!dealer || !target) return;
-    const orient = () => {
-      const from = dealer.getBoundingClientRect(), to = target.getBoundingClientRect();
-      setDirection(to.x + to.width / 2 < from.x + from.width / 2 ? "left" : "right");
-    };
-    orient();
-    const observer = new ResizeObserver(orient);
-    observer.observe(dealer);
-    observer.observe(target);
-    window.addEventListener("resize", orient);
-    return () => { observer.disconnect(); window.removeEventListener("resize", orient); };
-  }, [targetSelector]);
   const releasedCue = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     // A flight starts only after this release frame exists in the rendered SVG.
@@ -61,7 +43,7 @@ export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, o
   useEffect(() => {
     if (playback.animation !== "idle" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setTimeout(() => setFrameIndex(index => (index + 1) % DEALER_ANIMATIONS.idle.length),
-      frameIndex === 3 ? 120 : 1400);
+      DEALER_IDLE_FRAME_MS[frameIndex]);
     return () => window.clearTimeout(timer);
   }, [playback, frameIndex]);
   useEffect(() => {
@@ -98,17 +80,15 @@ export default function ChibiDealer({ dealCue, initialDeal, presentedExchange, o
   const sequence = DEALER_ANIMATIONS[playback.animation];
   const frame = sequence[Math.min(frameIndex, sequence.length - 1)];
   const [x, y, width, height] = CHIBI_FRAMES[frame];
-  const mirrored = dealerMirrored(playback.animation, direction);
-  return <div ref={dealerRef} className="chibi-dealer" aria-hidden="true" data-animation={playback.animation}
-    data-playback={playback.id} data-frame={frame} data-direction={direction} data-mirrored={mirrored}>
+  return <div className="chibi-dealer" aria-hidden="true" data-animation={playback.animation}
+    data-playback={playback.id} data-frame={frame} data-direction="left">
     <svg viewBox="0 0 160 158" fill="none" focusable="false">
-      <g transform={mirrored ? "translate(160 0) scale(-1 1)" : undefined}>
-      <svg x={80 - CHIBI_BODY_X[frame]} y={158 - height} width={width} height={height}
-        viewBox={`${x} ${y} ${width} ${height}`} overflow="hidden">
-        <image href={`${import.meta.env.BASE_URL}characters/chibi-dealer.png`} width="1122" height="1402" />
+      <svg x={(160 - width * 158 / height) / 2} width={width * 158 / height} height="158"
+        viewBox={`${x} ${y} ${width} ${height}`}
+        preserveAspectRatio="xMidYMax meet" overflow="hidden">
+        <image href={`${import.meta.env.BASE_URL}characters/chibi-dealer-optimized.png`} width={CHIBI_SHEET.width} height={CHIBI_SHEET.height} />
       </svg>
       <circle className="dealer-release-origin" cx={DEALER_HAND.x} cy={DEALER_HAND.y} r="1" opacity="0" />
-      </g>
     </svg>
   </div>;
 }

@@ -73,13 +73,34 @@ test("keeping cards creates no replacement playback", () => {
   assert.deepEqual(exchangeTimeline(0).replacements, []);
 });
 
-test('the selected poses all belong to gameplay actions and release timing matches the deal sequence', async () => {
-  const { CHIBI_FRAMES, CHIBI_BODY_X, DEALER_ANIMATIONS, DEALER_FRAME_MS,
-    DEALER_RELEASE_FRAME, DEALER_DEAL_MS } = await import('../src/dealerAnimation.ts');
+test('optimized sheet maps only the supplied idle, deal and offer cells with a nonblank final deal hold', async () => {
+  const { CHIBI_FRAMES, CHIBI_SHEET, DEALER_ANIMATIONS, DEALER_FRAME_MS,
+    DEALER_RELEASE_FRAME, DEALER_DEAL_MS, DEALER_IDLE_FRAME_MS } = await import('../src/dealerAnimation.ts');
   const used = new Set(Object.values(DEALER_ANIMATIONS).flat());
   assert.deepEqual([...used].sort(), Object.keys(CHIBI_FRAMES).sort());
-  for (const frame of used) assert.ok(Number.isFinite(CHIBI_BODY_X[frame]));
-  assert.equal(DEALER_ANIMATIONS.deal[DEALER_RELEASE_FRAME], 'release');
+  assert.equal(DEALER_ANIMATIONS.idle.length, 8);
+  assert.equal(DEALER_IDLE_FRAME_MS.length, 8);
+  assert.equal(DEALER_ANIMATIONS.deal.length, 12);
+  assert.equal(DEALER_ANIMATIONS.offer.length, 8);
+  const rows = animation => DEALER_ANIMATIONS[animation].map(frame =>
+    Math.floor(CHIBI_FRAMES[frame][1] / (CHIBI_SHEET.height / 4)) + 1);
+  assert.deepEqual(rows('idle'), Array(8).fill(1));
+  assert.deepEqual(rows('deal'), [...Array(8).fill(2), ...Array(4).fill(3)]);
+  assert.deepEqual(rows('offer'), Array(8).fill(4));
+  assert.equal(DEALER_ANIMATIONS.deal.at(-1), DEALER_ANIMATIONS.deal.at(-2));
+  for (const frame of used) {
+    const [x, y, width, height] = CHIBI_FRAMES[frame];
+    assert.ok(x >= 0 && y >= 0 && x + width <= CHIBI_SHEET.width && y + height <= CHIBI_SHEET.height);
+    // Row 3's fourth cell and remaining cells contain no character.
+    if (y > CHIBI_SHEET.height / 2 && y < CHIBI_SHEET.height * .75)
+      assert.ok(x < CHIBI_SHEET.width * 3 / 8);
+  }
+  assert.equal(DEALER_ANIMATIONS.deal[DEALER_RELEASE_FRAME], 'deal6');
   assert.equal(DEALER_RELEASE_MS, DEALER_RELEASE_FRAME * DEALER_FRAME_MS);
   assert.equal(DEALER_DEAL_MS, DEALER_ANIMATIONS.deal.length * DEALER_FRAME_MS);
+  const { readFileSync } = await import('node:fs');
+  const png = readFileSync(new URL('../public/characters/chibi-dealer-optimized.png', import.meta.url));
+  assert.equal(png.readUInt32BE(16), CHIBI_SHEET.width);
+  assert.equal(png.readUInt32BE(20), CHIBI_SHEET.height);
+  assert.equal(png[25], 6); // PNG RGBA: preserve the sheet's transparency.
 });
